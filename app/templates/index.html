@@ -73,7 +73,10 @@
                         id="recipient-picker"
                     >
                         <div class="lookup-shell">
-                            <span class="search-icon" aria-hidden="true">
+                            <span
+                                class="search-icon"
+                                aria-hidden="true"
+                            >
                                 ⌕
                             </span>
 
@@ -82,19 +85,21 @@
                                 id="company-search"
                                 class="lookup-input"
                                 placeholder="Search and select recipients..."
-                                aria-label="Search by third party, group, or module..."
+                                aria-label="Search by third party, group, or module"
+                                aria-controls="recipient-dropdown"
+                                aria-expanded="false"
                                 autocomplete="off"
                             >
 
-                            <button
-                                type="button"
+                            <span
                                 class="lookup-toggle"
                                 id="lookup-toggle"
-                                aria-label="Toggle recipient list"
-                                aria-expanded="false"
+                                aria-hidden="true"
                             >
-                                <span class="lookup-chevron">⌄</span>
-                            </button>
+                                <span class="lookup-chevron">
+                                    ⌄
+                                </span>
+                            </span>
                         </div>
 
                         <div
@@ -108,7 +113,9 @@
                                     data-group-name="{{ group_name }}"
                                 >
                                     <div class="group-title">
-                                        <span>{{ group_name }}</span>
+                                        <span class="group-title-name">
+                                            {{ group_name }}
+                                        </span>
 
                                         <button
                                             type="button"
@@ -117,7 +124,9 @@
                                             aria-label="Toggle all sendable routes in {{ group_name }}"
                                             title="Select or unselect this group"
                                         >
-                                            {{ companies | length }}
+                                            <span data-group-count>
+                                                {{ companies | length }}
+                                            </span>
                                         </button>
                                     </div>
 

@@ -356,6 +356,16 @@ function updateGroupToggleStates() {
                     groupOptions.filter(
                         isSelected
                     ).length;
+                
+                const groupCount =
+                     toggle.querySelector(
+                            "[data-group-count]"
+                    );
+
+                if (groupCount) {
+                        groupCount.textContent =
+                            `${selectedCountInGroup} / ${groupOptions.length}`;
+                }
 
                 const allSelected =
                     groupOptions.length > 0
@@ -439,7 +449,7 @@ function openRecipientPicker() {
         "open"
     );
 
-    lookupToggle.setAttribute(
+    searchInput.setAttribute(
         "aria-expanded",
         "true"
     );
@@ -450,7 +460,7 @@ function closeRecipientPicker() {
         "open"
     );
 
-    lookupToggle.setAttribute(
+    searchInput.setAttribute(
         "aria-expanded",
         "false"
     );
@@ -1115,6 +1125,35 @@ document
                         return;
                     }
 
+                    if (
+                        defaultAllSelectionActive
+                    ) {
+                        selectableOptions.forEach(
+                            (option) => {
+                                setSelected(
+                                    option,
+                                    false
+                                );
+                            }
+                        );
+
+                        groupOptions.forEach(
+                            (option) => {
+                                setSelected(
+                                    option,
+                                    true
+                                );
+                            }
+                        );
+
+                        defaultAllSelectionActive =
+                            false;
+
+                        updateSelectionUI();
+
+                        return;
+                    }
+
                     const allSelected =
                         groupOptions.every(
                             isSelected
@@ -1128,9 +1167,6 @@ document
                             );
                         }
                     );
-
-                    defaultAllSelectionActive =
-                        false;
 
                     updateSelectionUI();
                 }
@@ -1177,38 +1213,25 @@ unselectAllButton.addEventListener(
 );
 
 searchInput.addEventListener(
-    "focus",
+    "click",
     () => {
-        openRecipientPicker();
+        const isOpen =
+            recipientPicker.classList.contains(
+                "open"
+            );
+
+        if (isOpen) {
+            closeRecipientPicker();
+        } else {
+            openRecipientPicker();
+        }
     }
 );
 
 searchInput.addEventListener(
     "input",
     () => {
-        /*
-         * Filter only. Opening is handled by explicit focus
-         * or the dropdown button. This prevents browser
-         * autofill activity in other fields from opening
-         * the recipient lookup unexpectedly.
-         */
         filterRecipientOptions();
-    }
-);
-
-lookupToggle.addEventListener(
-    "click",
-    () => {
-        if (
-            recipientPicker.classList.contains(
-                "open"
-            )
-        ) {
-            closeRecipientPicker();
-        } else {
-            openRecipientPicker();
-            searchInput.focus();
-        }
     }
 );
 

@@ -1,3 +1,5 @@
+import httpx  # noqa: F401
+
 from app.core.logging import get_logger
 from app.schemas.company import CompanyRecord
 from app.schemas.email import (
@@ -9,6 +11,7 @@ from app.schemas.email import (
     EmailSendResult,
 )
 from app.services import graph_service
+
 
 logger = get_logger(__name__)
 
@@ -51,12 +54,17 @@ def build_email_preview(
         len(request.selected_company_rows),
     )
 
-    companies_by_row = {company.source_row: company for company in companies}
+    companies_by_row = {
+        company.source_row: company
+        for company in companies
+    }
 
     recipients: list[EmailPreviewRecipient] = []
 
     for source_row in request.selected_company_rows:
-        company = companies_by_row.get(source_row)
+        company = companies_by_row.get(
+            source_row
+        )
 
         if company is None:
             logger.warning(
@@ -75,7 +83,8 @@ def build_email_preview(
             )
 
             raise EmailPreviewError(
-                f"{company.name} cannot receive email: " f"{company.unavailable_reason}"
+                f"{company.name} cannot receive email: "
+                f"{company.unavailable_reason}"
             )
 
         recipients.append(
@@ -90,9 +99,13 @@ def build_email_preview(
         )
 
     if not recipients:
-        logger.warning("Preview rejected because no recipient routes were selected.")
+        logger.warning(
+            "Preview rejected because no recipient routes were selected."
+        )
 
-        raise EmailPreviewError("At least one recipient must be selected.")
+        raise EmailPreviewError(
+            "At least one recipient must be selected."
+        )
 
     return EmailPreviewResponse(
         sender=sender_email,
@@ -121,10 +134,14 @@ async def _get_sender_email(
         )
 
     except graph_service.GraphAuthenticationError as exc:
-        raise EmailAuthenticationError(str(exc)) from exc
+        raise EmailAuthenticationError(
+            str(exc)
+        ) from exc
 
     except graph_service.GraphRequestError as exc:
-        raise EmailSendError(str(exc)) from exc
+        raise EmailSendError(
+            str(exc)
+        ) from exc
 
 
 async def _send_graph_email(
@@ -152,10 +169,14 @@ async def _send_graph_email(
         )
 
     except graph_service.GraphAuthenticationError as exc:
-        raise EmailAuthenticationError(str(exc)) from exc
+        raise EmailAuthenticationError(
+            str(exc)
+        ) from exc
 
     except graph_service.GraphRequestError as exc:
-        raise EmailSendError(str(exc)) from exc
+        raise EmailSendError(
+            str(exc)
+        ) from exc
 
 
 async def send_selected_emails(
@@ -191,9 +212,15 @@ async def send_selected_emails(
     results: list[EmailSendResult] = []
 
     for recipient in preview.recipients:
-        to_addresses = [str(address) for address in recipient.to]
+        to_addresses = [
+            str(address)
+            for address in recipient.to
+        ]
 
-        cc_addresses = [str(address) for address in recipient.cc]
+        cc_addresses = [
+            str(address)
+            for address in recipient.cc
+        ]
 
         try:
             await _send_graph_email(
@@ -234,9 +261,16 @@ async def send_selected_emails(
             )
         )
 
-    successful = sum(1 for result in results if result.success)
+    successful = sum(
+        1
+        for result in results
+        if result.success
+    )
 
-    failed = len(results) - successful
+    failed = (
+        len(results)
+        - successful
+    )
 
     return EmailSendResponse(
         sender=sender_email,
