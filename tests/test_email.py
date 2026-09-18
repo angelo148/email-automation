@@ -8,7 +8,6 @@ from app.main import app
 from app.routes import email as email_routes
 from app.services import email_service
 
-
 client = TestClient(app)
 
 FIXED_SENDER = "angelofarah1@outlook.com"
@@ -75,9 +74,7 @@ def email_excel_file(
 
     file_path = tmp_path / "companies.xlsx"
 
-    create_email_test_workbook(
-        file_path
-    )
+    create_email_test_workbook(file_path)
 
     monkeypatch.setattr(
         email_routes,
@@ -200,10 +197,7 @@ def test_preview_removes_duplicate_rows(
 
     assert body["sender"] == FIXED_SENDER
     assert body["recipient_count"] == 2
-    assert [
-        recipient["source_row"]
-        for recipient in body["recipients"]
-    ] == [2, 3]
+    assert [recipient["source_row"] for recipient in body["recipients"]] == [2, 3]
 
 
 def test_send_requires_bearer_token(
@@ -219,18 +213,14 @@ def test_send_requires_bearer_token(
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == (
-        "Microsoft sign-in is required."
-    )
+    assert response.json()["detail"] == ("Microsoft sign-in is required.")
 
 
 def test_send_succeeds_for_all_recipients(
     email_excel_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sent_routes: list[
-        tuple[list[str], list[str]]
-    ] = []
+    sent_routes: list[tuple[list[str], list[str]]] = []
 
     async def fake_sender(
         access_token: str,
@@ -324,9 +314,7 @@ def test_send_records_per_recipient_failure(
     async def fake_send(
         **kwargs,
     ) -> None:
-        raise email_service.EmailSendError(
-            "Simulated Graph send failure."
-        )
+        raise email_service.EmailSendError("Simulated Graph send failure.")
 
     monkeypatch.setattr(
         email_service,
@@ -361,10 +349,7 @@ def test_send_records_per_recipient_failure(
     assert body["successful"] == 0
     assert body["failed"] == 1
     assert body["results"][0]["success"] is False
-    assert (
-        body["results"][0]["detail"]
-        == "Simulated Graph send failure."
-    )
+    assert body["results"][0]["detail"] == "Simulated Graph send failure."
 
 
 def test_send_rejects_invalid_microsoft_session(
@@ -401,6 +386,4 @@ def test_send_rejects_invalid_microsoft_session(
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == (
-        "Microsoft sign-in is no longer valid."
-    )
+    assert response.json()["detail"] == ("Microsoft sign-in is no longer valid.")

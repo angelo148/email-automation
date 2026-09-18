@@ -29,7 +29,6 @@ from app.services.microsoft_auth_service import (
     acquire_access_token_silent,
 )
 
-
 router = APIRouter(
     prefix="/email",
     tags=["Email"],
@@ -50,14 +49,9 @@ def _extract_bearer_token(
             detail="Microsoft sign-in is required.",
         )
 
-    scheme, _, token = authorization.partition(
-        " "
-    )
+    scheme, _, token = authorization.partition(" ")
 
-    if (
-        scheme.casefold() != "bearer"
-        or not token.strip()
-    ):
+    if scheme.casefold() != "bearer" or not token.strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Microsoft authorization header.",
@@ -68,9 +62,7 @@ def _extract_bearer_token(
 
 def _load_companies():
     try:
-        return load_companies_from_excel(
-            COMPANIES_FILE
-        )
+        return load_companies_from_excel(COMPANIES_FILE)
 
     except FileNotFoundError as exc:
         raise HTTPException(
@@ -98,9 +90,7 @@ async def _send_with_token(
             request=request,
             companies=companies,
             access_token=access_token,
-            fixed_sender_email=(
-                settings.microsoft_fixed_sender_email
-            ),
+            fixed_sender_email=(settings.microsoft_fixed_sender_email),
         )
 
     except EmailPreviewError as exc:
@@ -138,9 +128,7 @@ async def preview_email(
         return build_email_preview(
             request=request,
             companies=companies,
-            sender_email=(
-                settings.microsoft_fixed_sender_email
-            ),
+            sender_email=(settings.microsoft_fixed_sender_email),
         )
 
     except EmailPreviewError as exc:
@@ -157,17 +145,13 @@ async def preview_email(
 )
 async def send_email(
     request: EmailSendRequest,
-    authorization: str | None = Header(
-        default=None
-    ),
+    authorization: str | None = Header(default=None),
 ) -> EmailSendResponse:
     """
     Existing bearer-token endpoint retained for backward compatibility/tests.
     """
 
-    access_token = _extract_bearer_token(
-        authorization
-    )
+    access_token = _extract_bearer_token(authorization)
 
     return await _send_with_token(
         request=request,
@@ -190,9 +174,7 @@ async def send_email_with_persistent_session(
     """
 
     try:
-        access_token = (
-            acquire_access_token_silent()
-        )
+        access_token = acquire_access_token_silent()
 
     except MicrosoftAuthenticationRequired as exc:
         raise HTTPException(

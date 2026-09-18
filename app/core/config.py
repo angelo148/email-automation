@@ -28,9 +28,7 @@ class Settings(BaseSettings):
         "CRITICAL",
     ] = "DEBUG"
 
-    companies_file: Path = Path(
-        "data/3rd Party- Ticket Support.xlsx"
-    )
+    companies_file: Path = Path("data/3rd Party- Ticket Support.xlsx")
 
     microsoft_client_id: str | None = None
     microsoft_client_secret: str | None = None
@@ -39,23 +37,15 @@ class Settings(BaseSettings):
     microsoft_tenant_id: str | None = None
 
     # Existing SPA redirect. It can remain registered in Entra.
-    microsoft_redirect_uri: str = (
-        "http://localhost:8000"
-    )
+    microsoft_redirect_uri: str = "http://localhost:8000"
 
     # Server-side authorization-code callback used by the persistent login.
-    microsoft_callback_uri: str = (
-        "http://localhost:8000/auth/callback"
-    )
+    microsoft_callback_uri: str = "http://localhost:8000/auth/callback"
 
-    microsoft_fixed_sender_email: str = (
-        "angelofarah1@outlook.com"
-    )
+    microsoft_fixed_sender_email: str = "angelofarah1@outlook.com"
 
     # Encrypted with Windows DPAPI by msal-extensions.
-    microsoft_token_cache_file: Path = Path(
-        "auth_data/microsoft_token_cache.bin"
-    )
+    microsoft_token_cache_file: Path = Path("auth_data/microsoft_token_cache.bin")
 
     allowed_hosts: list[str] = Field(
         default_factory=lambda: [
@@ -74,24 +64,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_settings(self) -> "Settings":
-        if (
-            self.environment == "production"
-            and self.debug
-        ):
-            raise ValueError(
-                "DEBUG must be false when ENVIRONMENT=production"
-            )
+        if self.environment == "production" and self.debug:
+            raise ValueError("DEBUG must be false when ENVIRONMENT=production")
 
         if self.environment == "production":
             if not self.microsoft_client_id:
-                raise ValueError(
-                    "MICROSOFT_CLIENT_ID is required in production."
-                )
+                raise ValueError("MICROSOFT_CLIENT_ID is required in production.")
 
             if not self.microsoft_client_secret:
-                raise ValueError(
-                    "MICROSOFT_CLIENT_SECRET is required in production."
-                )
+                raise ValueError("MICROSOFT_CLIENT_SECRET is required in production.")
 
             if not self.microsoft_fixed_sender_email:
                 raise ValueError(

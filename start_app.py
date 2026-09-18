@@ -1,8 +1,7 @@
-from threading import Timer
 import webbrowser
+from threading import Timer
 
 import uvicorn
-
 
 APP_URL = "http://localhost:8000"
 

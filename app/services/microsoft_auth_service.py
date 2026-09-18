@@ -14,21 +14,16 @@ from msal_extensions import (
 from app.core.config import get_settings
 from app.core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
-MICROSOFT_AUTHORITY = (
-    "https://login.microsoftonline.com/consumers"
-)
+MICROSOFT_AUTHORITY = "https://login.microsoftonline.com/consumers"
 
 MICROSOFT_SCOPES = [
     "User.Read",
     "Mail.Send",
 ]
 
-GRAPH_ME_URL = (
-    "https://graph.microsoft.com/v1.0/me"
-)
+GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me"
 
 GRAPH_TIMEOUT_SECONDS = 20.0
 
@@ -53,9 +48,7 @@ def _validate_configuration() -> None:
     settings = get_settings()
 
     if not settings.microsoft_client_id:
-        raise MicrosoftAuthConfigurationError(
-            "MICROSOFT_CLIENT_ID is not configured."
-        )
+        raise MicrosoftAuthConfigurationError("MICROSOFT_CLIENT_ID is not configured.")
 
     if not settings.microsoft_client_secret:
         raise MicrosoftAuthConfigurationError(
@@ -85,27 +78,21 @@ def _get_token_cache() -> PersistedTokenCache:
 
     settings = get_settings()
 
-    cache_path = Path(
-        settings.microsoft_token_cache_file
-    )
+    cache_path = Path(settings.microsoft_token_cache_file)
 
     cache_path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    persistence = build_encrypted_persistence(
-        str(cache_path)
-    )
+    persistence = build_encrypted_persistence(str(cache_path))
 
     if not persistence.is_encrypted:
         raise MicrosoftAuthConfigurationError(
             "Microsoft token cache encryption is unavailable."
         )
 
-    return PersistedTokenCache(
-        persistence
-    )
+    return PersistedTokenCache(persistence)
 
 
 @lru_cache
@@ -118,9 +105,7 @@ def get_microsoft_app() -> msal.ConfidentialClientApplication:
 
     return msal.ConfidentialClientApplication(
         client_id=settings.microsoft_client_id,
-        client_credential=(
-            settings.microsoft_client_secret
-        ),
+        client_credential=(settings.microsoft_client_secret),
         authority=MICROSOFT_AUTHORITY,
         token_cache=_get_token_cache(),
     )
@@ -128,16 +113,12 @@ def get_microsoft_app() -> msal.ConfidentialClientApplication:
 
 def _get_fixed_sender_account() -> dict[str, Any] | None:
     settings = get_settings()
-    expected = _normalized_email(
-        settings.microsoft_fixed_sender_email
-    )
+    expected = _normalized_email(settings.microsoft_fixed_sender_email)
 
     accounts = get_microsoft_app().get_accounts()
 
     for account in accounts:
-        username = str(
-            account.get("username", "")
-        )
+        username = str(account.get("username", ""))
 
         if _normalized_email(username) == expected:
             return account
@@ -153,22 +134,14 @@ def begin_authentication() -> dict[str, Any]:
 
     flow = app.initiate_auth_code_flow(
         scopes=MICROSOFT_SCOPES,
-        redirect_uri=(
-            settings.microsoft_callback_uri
-        ),
-        login_hint=(
-            settings.microsoft_fixed_sender_email
-        ),
+        redirect_uri=(settings.microsoft_callback_uri),
+        login_hint=(settings.microsoft_fixed_sender_email),
     )
 
     if "auth_uri" not in flow:
-        logger.error(
-            "Microsoft did not return an auth_uri while starting login."
-        )
+        logger.error("Microsoft did not return an auth_uri while starting login.")
 
-        raise MicrosoftAuthConfigurationError(
-            "Microsoft sign-in could not be started."
-        )
+        raise MicrosoftAuthConfigurationError("Microsoft sign-in could not be started.")
 
     return flow
 
@@ -179,10 +152,8 @@ async def _resolve_graph_sender(
     """Resolve the signed-in Microsoft mailbox using Graph /me."""
 
     headers = {
-        "Authorization":
-            f"Bearer {access_token}",
-        "Accept":
-            "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "Accept": "application/json",
     }
 
     async with httpx.AsyncClient(
@@ -192,10 +163,7 @@ async def _resolve_graph_sender(
             response = await client.get(
                 GRAPH_ME_URL,
                 headers=headers,
-                params={
-                    "$select":
-                        "mail,userPrincipalName"
-                },
+                params={"$select": "mail,userPrincipalName"},
             )
         except httpx.RequestError as exc:
             raise MicrosoftAuthenticationRequired(
@@ -222,11 +190,7 @@ async def _resolve_graph_sender(
 
     data = response.json()
 
-    sender = (
-        data.get("mail")
-        or data.get("userPrincipalName")
-        or ""
-    )
+    sender = data.get("mail") or data.get("userPrincipalName") or ""
 
     if not sender:
         raise MicrosoftAuthenticationRequired(
@@ -240,16 +204,12 @@ def _remove_non_fixed_accounts() -> None:
     """Remove unexpected accounts from the backend token cache."""
 
     settings = get_settings()
-    expected = _normalized_email(
-        settings.microsoft_fixed_sender_email
-    )
+    expected = _normalized_email(settings.microsoft_fixed_sender_email)
 
     app = get_microsoft_app()
 
     for account in app.get_accounts():
-        username = str(
-            account.get("username", "")
-        )
+        username = str(account.get("username", ""))
 
         if _normalized_email(username) != expected:
             try:
@@ -283,9 +243,7 @@ async def complete_authentication(
             "Microsoft sign-in response could not be validated."
         ) from exc
 
-    access_token = result.get(
-        "access_token"
-    )
+    access_token = result.get("access_token")
 
     if not access_token:
         logger.warning(
@@ -293,19 +251,12 @@ async def complete_authentication(
             result.get("error"),
         )
 
-        raise MicrosoftAuthenticationRequired(
-            "Microsoft sign-in was not completed."
-        )
+        raise MicrosoftAuthenticationRequired("Microsoft sign-in was not completed.")
 
-    actual_sender = await _resolve_graph_sender(
-        str(access_token)
-    )
+    actual_sender = await _resolve_graph_sender(str(access_token))
 
-    if (
-        _normalized_email(actual_sender)
-        != _normalized_email(
-            settings.microsoft_fixed_sender_email
-        )
+    if _normalized_email(actual_sender) != _normalized_email(
+        settings.microsoft_fixed_sender_email
     ):
         _remove_non_fixed_accounts()
 
@@ -333,9 +284,7 @@ def acquire_access_token_silent() -> str:
     account = _get_fixed_sender_account()
 
     if account is None:
-        raise MicrosoftAuthenticationRequired(
-            "Microsoft sign-in is required."
-        )
+        raise MicrosoftAuthenticationRequired("Microsoft sign-in is required.")
 
     app = get_microsoft_app()
 
@@ -345,13 +294,9 @@ def acquire_access_token_silent() -> str:
     )
 
     if not result:
-        raise MicrosoftAuthenticationRequired(
-            "Microsoft sign-in is required."
-        )
+        raise MicrosoftAuthenticationRequired("Microsoft sign-in is required.")
 
-    access_token = result.get(
-        "access_token"
-    )
+    access_token = result.get("access_token")
 
     if not access_token:
         logger.info(
@@ -359,9 +304,7 @@ def acquire_access_token_silent() -> str:
             result.get("error"),
         )
 
-        raise MicrosoftAuthenticationRequired(
-            "Microsoft sign-in is required."
-        )
+        raise MicrosoftAuthenticationRequired("Microsoft sign-in is required.")
 
     return str(access_token)
 

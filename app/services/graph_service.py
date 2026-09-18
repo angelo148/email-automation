@@ -2,7 +2,6 @@ import httpx
 
 from app.core.logging import get_logger
 
-
 logger = get_logger(__name__)
 
 
@@ -86,9 +85,7 @@ async def get_sender_email(
     The access token is used only for the request and is never logged.
     """
 
-    headers = _authorization_headers(
-        access_token
-    )
+    headers = _authorization_headers(access_token)
 
     async with httpx.AsyncClient(
         timeout=GRAPH_TIMEOUT_SECONDS,
@@ -98,28 +95,20 @@ async def get_sender_email(
                 f"{GRAPH_BASE_URL}/me",
                 headers=headers,
                 params={
-                    "$select": (
-                        "mail,"
-                        "userPrincipalName"
-                    ),
+                    "$select": ("mail," "userPrincipalName"),
                 },
             )
         except httpx.RequestError as exc:
-            logger.error(
-                "Could not reach Microsoft Graph while resolving sender."
-            )
+            logger.error("Could not reach Microsoft Graph while resolving sender.")
 
-            raise GraphRequestError(
-                "Could not connect to Microsoft Graph."
-            ) from exc
+            raise GraphRequestError("Could not connect to Microsoft Graph.") from exc
 
     if response.status_code in {
         401,
         403,
     }:
         raise GraphAuthenticationError(
-            "Microsoft sign-in is no longer valid. "
-            "Sign in again and retry."
+            "Microsoft sign-in is no longer valid. " "Sign in again and retry."
         )
 
     if not response.is_success:
@@ -134,28 +123,17 @@ async def get_sender_email(
 
     data = response.json()
 
-    sender_email = (
-        data.get("mail")
-        or data.get("userPrincipalName")
-    )
+    sender_email = data.get("mail") or data.get("userPrincipalName")
 
-    if (
-        not isinstance(sender_email, str)
-        or "@" not in sender_email
-    ):
+    if not isinstance(sender_email, str) or "@" not in sender_email:
         raise GraphAuthenticationError(
             "Microsoft did not return a valid sender email address."
         )
 
     sender_email = sender_email.strip()
-    expected_sender_email = (
-        expected_sender_email.strip()
-    )
+    expected_sender_email = expected_sender_email.strip()
 
-    if (
-        sender_email.casefold()
-        != expected_sender_email.casefold()
-    ):
+    if sender_email.casefold() != expected_sender_email.casefold():
         logger.warning(
             "Blocked Microsoft account '%s'; fixed sender is '%s'.",
             sender_email,
@@ -187,13 +165,9 @@ async def send_email(
         cc_addresses=cc_addresses,
     )
 
-    headers = _authorization_headers(
-        access_token
-    )
+    headers = _authorization_headers(access_token)
 
-    headers["Content-Type"] = (
-        "application/json"
-    )
+    headers["Content-Type"] = "application/json"
 
     async with httpx.AsyncClient(
         timeout=GRAPH_TIMEOUT_SECONDS,
@@ -205,21 +179,16 @@ async def send_email(
                 json=payload,
             )
         except httpx.RequestError as exc:
-            logger.error(
-                "Could not reach Microsoft Graph while sending email."
-            )
+            logger.error("Could not reach Microsoft Graph while sending email.")
 
-            raise GraphRequestError(
-                "Could not connect to Microsoft Graph."
-            ) from exc
+            raise GraphRequestError("Could not connect to Microsoft Graph.") from exc
 
     if response.status_code in {
         401,
         403,
     }:
         raise GraphAuthenticationError(
-            "Microsoft authorization was rejected. "
-            "Sign in again and retry."
+            "Microsoft authorization was rejected. " "Sign in again and retry."
         )
 
     if response.status_code != 202:
@@ -228,6 +197,4 @@ async def send_email(
             response.status_code,
         )
 
-        raise GraphRequestError(
-            "Microsoft Graph rejected the email."
-        )
+        raise GraphRequestError("Microsoft Graph rejected the email.")

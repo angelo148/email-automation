@@ -33,13 +33,9 @@ class EmailPreviewRequest(BaseModel):
         """Validate and de-duplicate Excel row IDs."""
 
         if any(row < 1 for row in value):
-            raise ValueError(
-                "Selected company rows must be positive integers."
-            )
+            raise ValueError("Selected company rows must be positive integers.")
 
-        return list(
-            dict.fromkeys(value)
-        )
+        return list(dict.fromkeys(value))
 
     @field_validator("subject", "content")
     @classmethod
@@ -52,9 +48,7 @@ class EmailPreviewRequest(BaseModel):
         cleaned = value.strip()
 
         if not cleaned:
-            raise ValueError(
-                "Value cannot be empty or whitespace."
-            )
+            raise ValueError("Value cannot be empty or whitespace.")
 
         return cleaned
 
@@ -85,9 +79,7 @@ class EmailPreviewResponse(BaseModel):
 
     recipient_count: int
 
-    recipients: list[
-        EmailPreviewRecipient
-    ]
+    recipients: list[EmailPreviewRecipient]
 
 
 class EmailSendResult(BaseModel):

@@ -18,9 +18,7 @@ def create_app() -> FastAPI:
 
     settings = get_settings()
 
-    configure_logging(
-        settings.log_level
-    )
+    configure_logging(settings.log_level)
 
     logger = get_logger(__name__)
 
@@ -31,37 +29,20 @@ def create_app() -> FastAPI:
         settings.environment,
     )
 
-    docs_enabled = (
-        settings.environment
-        != "production"
-    )
+    docs_enabled = settings.environment != "production"
 
     application = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
         debug=settings.debug,
-        docs_url=(
-            "/docs"
-            if docs_enabled
-            else None
-        ),
-        redoc_url=(
-            "/redoc"
-            if docs_enabled
-            else None
-        ),
-        openapi_url=(
-            "/openapi.json"
-            if docs_enabled
-            else None
-        ),
+        docs_url=("/docs" if docs_enabled else None),
+        redoc_url=("/redoc" if docs_enabled else None),
+        openapi_url=("/openapi.json" if docs_enabled else None),
     )
 
     application.mount(
         "/static",
-        StaticFiles(
-            directory="app/static"
-        ),
+        StaticFiles(directory="app/static"),
         name="static",
     )
 
@@ -70,33 +51,17 @@ def create_app() -> FastAPI:
         settings,
     )
 
-    application.add_middleware(
-        RequestContextMiddleware
-    )
+    application.add_middleware(RequestContextMiddleware)
 
-    register_exception_handlers(
-        application
-    )
+    register_exception_handlers(application)
 
-    application.include_router(
-        health_router
-    )
-    application.include_router(
-        companies_router
-    )
-    application.include_router(
-        email_router
-    )
-    application.include_router(
-        web_router
-    )
-    application.include_router(
-        auth_router
-    )
+    application.include_router(health_router)
+    application.include_router(companies_router)
+    application.include_router(email_router)
+    application.include_router(web_router)
+    application.include_router(auth_router)
 
-    logger.debug(
-        "Application initialized successfully."
-    )
+    logger.debug("Application initialized successfully.")
 
     return application
 

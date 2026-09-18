@@ -17,7 +17,6 @@ from app.services.microsoft_auth_service import (
     is_authenticated,
 )
 
-
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
@@ -45,17 +44,10 @@ async def get_auth_config() -> dict[
     settings = get_settings()
 
     return {
-        "client_id":
-            settings.microsoft_client_id,
-
-        "tenant_id":
-            settings.microsoft_tenant_id,
-
-        "redirect_uri":
-            settings.microsoft_redirect_uri,
-
-        "fixed_sender_email":
-            settings.microsoft_fixed_sender_email,
+        "client_id": settings.microsoft_client_id,
+        "tenant_id": settings.microsoft_tenant_id,
+        "redirect_uri": settings.microsoft_redirect_uri,
+        "fixed_sender_email": settings.microsoft_fixed_sender_email,
     }
 
 
@@ -74,11 +66,8 @@ async def get_auth_status() -> dict[
         authenticated = False
 
     return {
-        "authenticated":
-            authenticated,
-
-        "fixed_sender_email":
-            settings.microsoft_fixed_sender_email,
+        "authenticated": authenticated,
+        "fixed_sender_email": settings.microsoft_fixed_sender_email,
     }
 
 
@@ -88,9 +77,7 @@ async def login() -> RedirectResponse:
 
     flow = begin_authentication()
 
-    state = str(
-        flow.get("state", "")
-    )
+    state = str(flow.get("state", ""))
 
     if not state:
         raise MicrosoftAuthConfigurationError(
@@ -114,17 +101,13 @@ async def callback(
 ) -> RedirectResponse:
     """Complete Microsoft's authorization-code flow."""
 
-    state = request.query_params.get(
-        "state"
-    )
+    state = request.query_params.get("state")
 
     if not state:
         return RedirectResponse(
             url=(
                 "/?auth_error="
-                + quote(
-                    "Microsoft sign-in returned without a valid state."
-                )
+                + quote("Microsoft sign-in returned without a valid state.")
             ),
             status_code=302,
         )
@@ -139,9 +122,7 @@ async def callback(
         return RedirectResponse(
             url=(
                 "/?auth_error="
-                + quote(
-                    "Microsoft sign-in session expired. Please try again."
-                )
+                + quote("Microsoft sign-in session expired. Please try again.")
             ),
             status_code=302,
         )
@@ -149,17 +130,12 @@ async def callback(
     try:
         await complete_authentication(
             flow=flow,
-            auth_response=dict(
-                request.query_params
-            ),
+            auth_response=dict(request.query_params),
         )
 
     except MicrosoftWrongAccountError as exc:
         return RedirectResponse(
-            url=(
-                "/?auth_error="
-                + quote(str(exc))
-            ),
+            url=("/?auth_error=" + quote(str(exc))),
             status_code=302,
         )
 
@@ -168,12 +144,7 @@ async def callback(
         MicrosoftAuthConfigurationError,
     ):
         return RedirectResponse(
-            url=(
-                "/?auth_error="
-                + quote(
-                    "Microsoft sign-in could not be completed."
-                )
-            ),
+            url=("/?auth_error=" + quote("Microsoft sign-in could not be completed.")),
             status_code=302,
         )
 

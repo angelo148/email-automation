@@ -26,9 +26,7 @@ class CompanyRecord(BaseModel):
             )
 
         if not self.can_email and self.to:
-            raise ValueError(
-                "A non-sendable third party cannot contain To addresses."
-            )
+            raise ValueError("A non-sendable third party cannot contain To addresses.")
 
         if not self.can_email and not self.unavailable_reason:
             raise ValueError(

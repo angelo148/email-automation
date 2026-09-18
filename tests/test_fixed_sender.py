@@ -1,7 +1,6 @@
 import pytest
 
-from app.services import email_service
-
+from app.services import email_service, graph_service
 
 FIXED_SENDER = "angelofarah1@outlook.com"
 
@@ -31,7 +30,7 @@ async def test_fixed_sender_accepts_configured_account(
             return FakeResponse()
 
     monkeypatch.setattr(
-        email_service.httpx,
+        graph_service.httpx,
         "AsyncClient",
         lambda **kwargs: FakeClient(),
     )
@@ -69,7 +68,7 @@ async def test_fixed_sender_blocks_other_accounts(
             return FakeResponse()
 
     monkeypatch.setattr(
-        email_service.httpx,
+        graph_service.httpx,
         "AsyncClient",
         lambda **kwargs: FakeClient(),
     )

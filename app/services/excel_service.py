@@ -7,7 +7,6 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from app.schemas.company import CompanyRecord
 
-
 REQUIRED_COLUMNS = {
     "module",
     "third party",
@@ -40,12 +39,7 @@ def _clean_text(value: Any) -> str:
     if value is None:
         return ""
 
-    return " ".join(
-        str(value)
-        .replace("\r", " ")
-        .replace("\n", " ")
-        .split()
-    ).strip()
+    return " ".join(str(value).replace("\r", " ").replace("\n", " ").split()).strip()
 
 
 def _split_email_values(value: Any) -> list[str]:
@@ -61,11 +55,7 @@ def _split_email_values(value: Any) -> list[str]:
 
     parts = re.split(r"[\n\r;,]+", raw_value)
 
-    return [
-        part.strip()
-        for part in parts
-        if part.strip()
-    ]
+    return [part.strip() for part in parts if part.strip()]
 
 
 def _parse_email_cell(
@@ -80,9 +70,7 @@ def _parse_email_cell(
 
     for candidate in _split_email_values(value):
         try:
-            email = EMAIL_ADAPTER.validate_python(
-                candidate
-            )
+            email = EMAIL_ADAPTER.validate_python(candidate)
 
         except ValidationError:
             invalid_values.append(candidate)
@@ -105,15 +93,10 @@ def _remove_duplicate_cc_addresses(
 ) -> list[EmailStr]:
     """Remove CC addresses already present in To."""
 
-    to_lookup = {
-        str(address).lower()
-        for address in to_addresses
-    }
+    to_lookup = {str(address).lower() for address in to_addresses}
 
     return [
-        address
-        for address in cc_addresses
-        if str(address).lower() not in to_lookup
+        address for address in cc_addresses if str(address).lower() not in to_lookup
     ]
 
 
@@ -130,25 +113,14 @@ def _find_header_row(
         ),
         start=1,
     ):
-        headers = [
-            _normalize_header(value)
-            for value in row
-        ]
+        headers = [_normalize_header(value) for value in row]
 
-        available_headers = {
-            header
-            for header in headers
-            if header
-        }
+        available_headers = {header for header in headers if header}
 
-        if REQUIRED_COLUMNS.issubset(
-            available_headers
-        ):
+        if REQUIRED_COLUMNS.issubset(available_headers):
             return row_number, headers
 
-    required_columns = ", ".join(
-        sorted(REQUIRED_COLUMNS)
-    )
+    required_columns = ", ".join(sorted(REQUIRED_COLUMNS))
 
     raise ExcelValidationError(
         "Could not find the third-party table header. "
@@ -169,10 +141,7 @@ def _get_unavailable_reason(
     if "website" in value.lower():
         return value
 
-    return (
-        "No valid email recipient configured. "
-        f"Excel value: {value}"
-    )
+    return "No valid email recipient configured. " f"Excel value: {value}"
 
 
 def load_companies_from_excel(
@@ -181,14 +150,10 @@ def load_companies_from_excel(
     """Load third-party recipient configurations from Excel."""
 
     if not file_path.exists():
-        raise FileNotFoundError(
-            f"Excel file not found: {file_path}"
-        )
+        raise FileNotFoundError(f"Excel file not found: {file_path}")
 
     if file_path.suffix.lower() != ".xlsx":
-        raise ExcelValidationError(
-            "Only .xlsx files are supported."
-        )
+        raise ExcelValidationError("Only .xlsx files are supported.")
 
     workbook = load_workbook(
         filename=file_path,
@@ -199,14 +164,10 @@ def load_companies_from_excel(
     try:
         worksheet = workbook.active
 
-        header_row_number, headers = _find_header_row(
-            worksheet
-        )
+        header_row_number, headers = _find_header_row(worksheet)
 
         column_indexes = {
-            header: index
-            for index, header in enumerate(headers)
-            if header
+            header: index for index, header in enumerate(headers) if header
         }
 
         companies: list[CompanyRecord] = []
@@ -223,35 +184,21 @@ def load_companies_from_excel(
             rows,
             start=header_row_number + 1,
         ):
-            module_value = row[
-                column_indexes["module"]
-            ]
+            module_value = row[column_indexes["module"]]
 
-            third_party_value = row[
-                column_indexes["third party"]
-            ]
+            third_party_value = row[column_indexes["third party"]]
 
-            third_party_group_value = row[
-                column_indexes["third party group"]
-            ]
+            third_party_group_value = row[column_indexes["third party group"]]
 
-            email_to_value = row[
-                column_indexes["email to"]
-            ]
+            email_to_value = row[column_indexes["email to"]]
 
-            email_cc_value = row[
-                column_indexes["email cc"]
-            ]
+            email_cc_value = row[column_indexes["email cc"]]
 
             module = _clean_text(module_value)
 
-            third_party = _clean_text(
-                third_party_value
-            )
+            third_party = _clean_text(third_party_value)
 
-            third_party_group = _clean_text(
-                third_party_group_value
-            )
+            third_party_group = _clean_text(third_party_group_value)
 
             if module:
                 current_module = module
@@ -270,17 +217,11 @@ def load_companies_from_excel(
                 continue
 
             if not third_party:
-                errors.append(
-                    f"Row {row_number}: "
-                    "Third Party is missing."
-                )
+                errors.append(f"Row {row_number}: " "Third Party is missing.")
                 continue
 
             if not third_party_group:
-                errors.append(
-                    f"Row {row_number}: "
-                    "Third Party Group is missing."
-                )
+                errors.append(f"Row {row_number}: " "Third Party Group is missing.")
                 continue
 
             if current_module is None:
@@ -294,16 +235,12 @@ def load_companies_from_excel(
             (
                 to_addresses,
                 invalid_to,
-            ) = _parse_email_cell(
-                email_to_value
-            )
+            ) = _parse_email_cell(email_to_value)
 
             (
                 cc_addresses,
                 invalid_cc,
-            ) = _parse_email_cell(
-                email_cc_value
-            )
+            ) = _parse_email_cell(email_cc_value)
 
             if to_addresses and invalid_to:
                 errors.append(
@@ -321,11 +258,9 @@ def load_companies_from_excel(
                 )
                 continue
 
-            cc_addresses = (
-                _remove_duplicate_cc_addresses(
-                    to_addresses=to_addresses,
-                    cc_addresses=cc_addresses,
-                )
+            cc_addresses = _remove_duplicate_cc_addresses(
+                to_addresses=to_addresses,
+                cc_addresses=cc_addresses,
             )
 
             can_email = bool(to_addresses)
@@ -333,11 +268,7 @@ def load_companies_from_excel(
             unavailable_reason: str | None = None
 
             if not can_email:
-                unavailable_reason = (
-                    _get_unavailable_reason(
-                        email_to_value
-                    )
-                )
+                unavailable_reason = _get_unavailable_reason(email_to_value)
 
             try:
                 company = CompanyRecord(
@@ -347,30 +278,24 @@ def load_companies_from_excel(
                     to=to_addresses,
                     cc=cc_addresses,
                     can_email=can_email,
-                    unavailable_reason=(
-                        unavailable_reason
-                    ),
+                    unavailable_reason=(unavailable_reason),
                     source_row=row_number,
                 )
 
             except ValidationError as exc:
-                errors.append(
-                    f"Row {row_number}: {exc}"
-                )
+                errors.append(f"Row {row_number}: {exc}")
                 continue
 
             companies.append(company)
 
         if errors:
             raise ExcelValidationError(
-                "Invalid Excel recipient data:\n"
-                + "\n".join(errors)
+                "Invalid Excel recipient data:\n" + "\n".join(errors)
             )
 
         if not companies:
             raise ExcelValidationError(
-                "The Excel workbook contains "
-                "no third-party records."
+                "The Excel workbook contains " "no third-party records."
             )
 
         return companies

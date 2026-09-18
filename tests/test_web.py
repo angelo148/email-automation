@@ -1,13 +1,12 @@
+import re
 from pathlib import Path
 
-import re
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 
 from app.main import app
 from app.routes import web as web_routes
-
 
 client = TestClient(app)
 
@@ -149,9 +148,6 @@ def test_third_party_groups_are_rendered(
     assert 'data-group-name="Touch"' in html
 
 
-import re
-
-
 def test_sendable_companies_start_selected(
     web_excel_file: Path,
 ) -> None:
@@ -162,8 +158,8 @@ def test_sendable_companies_start_selected(
     html = response.text
 
     sendable_options = re.findall(
-        r'<button[^>]*'
-        r'data-company-option[^>]*'
+        r"<button[^>]*"
+        r"data-company-option[^>]*"
         r'data-can-email="true"[^>]*'
         r'data-selected="true"[^>]*>',
         html,
@@ -182,9 +178,7 @@ def test_unavailable_companies_are_disabled(
 
     html = response.text
 
-    assert html.count(
-        'data-can-email="false"'
-    ) == 2
+    assert html.count('data-can-email="false"') == 2
 
     assert "Contact support on their website" in html
     assert "No email address configured." in html

@@ -11,7 +11,6 @@ from app.services.excel_service import (
     load_companies_from_excel,
 )
 
-
 router = APIRouter(
     tags=["Web"],
 )
@@ -42,9 +41,7 @@ def _group_companies_by_third_party(
     grouped: dict[str, list[CompanyRecord]] = defaultdict(list)
 
     for company in companies:
-        grouped[company.third_party_group].append(
-            company
-        )
+        grouped[company.third_party_group].append(company)
 
     return dict(grouped)
 
@@ -60,9 +57,7 @@ async def home(
     """Render the email composition interface."""
 
     try:
-        companies = load_companies_from_excel(
-            COMPANIES_FILE
-        )
+        companies = load_companies_from_excel(COMPANIES_FILE)
 
     except FileNotFoundError as exc:
         raise HTTPException(
@@ -76,17 +71,9 @@ async def home(
             detail=str(exc),
         ) from exc
 
-    grouped_companies = (
-        _group_companies_by_third_party(
-            companies
-        )
-    )
+    grouped_companies = _group_companies_by_third_party(companies)
 
-    sendable_count = sum(
-        1
-        for company in companies
-        if company.can_email
-    )
+    sendable_count = sum(1 for company in companies if company.can_email)
 
     return templates.TemplateResponse(
         request=request,

@@ -7,7 +7,6 @@ from app.services.excel_service import (
     load_companies_from_excel,
 )
 
-
 router = APIRouter(
     prefix="/companies",
     tags=["Companies"],
@@ -30,9 +29,7 @@ async def get_companies() -> list[CompanyResponse]:
     """Return all third-party recipient configurations."""
 
     try:
-        companies = load_companies_from_excel(
-            COMPANIES_FILE
-        )
+        companies = load_companies_from_excel(COMPANIES_FILE)
 
     except FileNotFoundError as exc:
         raise HTTPException(

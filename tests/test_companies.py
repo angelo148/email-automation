@@ -7,7 +7,6 @@ from openpyxl import Workbook
 from app.main import app
 from app.routes import companies as companies_routes
 
-
 client = TestClient(app)
 
 
@@ -132,8 +131,6 @@ def test_get_companies_returns_companies(
         "to": [],
         "cc": [],
         "can_email": False,
-        "unavailable_reason": (
-            "Contact support on their website"
-        ),
+        "unavailable_reason": ("Contact support on their website"),
         "source_row": 4,
     }

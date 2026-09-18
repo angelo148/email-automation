@@ -88,31 +88,19 @@ def test_loads_multiline_email_addresses(
 
     create_test_workbook(file_path)
 
-    companies = load_companies_from_excel(
-        file_path
-    )
+    companies = load_companies_from_excel(file_path)
 
-    alfa = next(
-        company
-        for company in companies
-        if company.name == "Alfa"
-    )
+    alfa = next(company for company in companies if company.name == "Alfa")
 
     assert alfa.module == "Vouchers"
     assert alfa.third_party_group == "Alfa"
 
-    assert [
-        str(address)
-        for address in alfa.to
-    ] == [
+    assert [str(address) for address in alfa.to] == [
         "first@alfa.com.lb",
         "second@alfa.com.lb",
     ]
 
-    assert [
-        str(address)
-        for address in alfa.cc
-    ] == [
+    assert [str(address) for address in alfa.cc] == [
         "manager@alfa.com.lb",
         "support@alfa.com.lb",
     ]
@@ -125,15 +113,9 @@ def test_reads_third_party_group(
 
     create_test_workbook(file_path)
 
-    companies = load_companies_from_excel(
-        file_path
-    )
+    companies = load_companies_from_excel(file_path)
 
-    omt = next(
-        company
-        for company in companies
-        if company.name == "OMTs"
-    )
+    omt = next(company for company in companies if company.name == "OMTs")
 
     assert omt.third_party_group == "OMT"
 
@@ -145,15 +127,9 @@ def test_inherits_module_from_previous_row(
 
     create_test_workbook(file_path)
 
-    companies = load_companies_from_excel(
-        file_path
-    )
+    companies = load_companies_from_excel(file_path)
 
-    alfa = next(
-        company
-        for company in companies
-        if company.name == "Alfa"
-    )
+    alfa = next(company for company in companies if company.name == "Alfa")
 
     assert alfa.module == "Vouchers"
 
@@ -165,27 +141,15 @@ def test_duplicate_to_removed_from_cc(
 
     create_test_workbook(file_path)
 
-    companies = load_companies_from_excel(
-        file_path
-    )
+    companies = load_companies_from_excel(file_path)
 
-    omt = next(
-        company
-        for company in companies
-        if company.name == "OMTs"
-    )
+    omt = next(company for company in companies if company.name == "OMTs")
 
-    assert [
-        str(address)
-        for address in omt.to
-    ] == [
+    assert [str(address) for address in omt.to] == [
         "primary@omt.com.lb",
     ]
 
-    assert [
-        str(address)
-        for address in omt.cc
-    ] == [
+    assert [str(address) for address in omt.cc] == [
         "cc@omt.com.lb",
     ]
 
@@ -197,23 +161,14 @@ def test_website_support_is_unavailable(
 
     create_test_workbook(file_path)
 
-    companies = load_companies_from_excel(
-        file_path
-    )
+    companies = load_companies_from_excel(file_path)
 
-    likecard = next(
-        company
-        for company in companies
-        if company.name == "Likecard"
-    )
+    likecard = next(company for company in companies if company.name == "Likecard")
 
     assert likecard.can_email is False
     assert likecard.to == []
 
-    assert (
-        likecard.unavailable_reason
-        == "Contact support on their website"
-    )
+    assert likecard.unavailable_reason == "Contact support on their website"
 
 
 def test_missing_email_is_unavailable(
@@ -223,23 +178,14 @@ def test_missing_email_is_unavailable(
 
     create_test_workbook(file_path)
 
-    companies = load_companies_from_excel(
-        file_path
-    )
+    companies = load_companies_from_excel(file_path)
 
-    reloadly = next(
-        company
-        for company in companies
-        if company.name == "Reloadly"
-    )
+    reloadly = next(company for company in companies if company.name == "Reloadly")
 
     assert reloadly.can_email is False
     assert reloadly.to == []
 
-    assert (
-        reloadly.unavailable_reason
-        == "No email address configured."
-    )
+    assert reloadly.unavailable_reason == "No email address configured."
 
 
 def test_missing_third_party_group_raises_error(
@@ -277,9 +223,7 @@ def test_missing_third_party_group_raises_error(
         ExcelValidationError,
         match="Third Party Group is missing",
     ):
-        load_companies_from_excel(
-            file_path
-        )
+        load_companies_from_excel(file_path)
 
 
 def test_invalid_cc_raises_validation_error(
@@ -317,6 +261,4 @@ def test_invalid_cc_raises_validation_error(
         ExcelValidationError,
         match="invalid Email CC",
     ):
-        load_companies_from_excel(
-            file_path
-        )
+        load_companies_from_excel(file_path)
