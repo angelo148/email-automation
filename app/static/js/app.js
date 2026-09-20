@@ -1,5 +1,7 @@
 let fixedSenderEmail = "";
 let currentPayload = null;
+let currentPreviewId = null;
+let isSending = false;
 let defaultAllSelectionActive = true;
 
 const recipientPicker =
@@ -849,6 +851,8 @@ async function requestPreview() {
                     : "Could not create email preview."
             );
         }
+        currentPreviewId =
+        data.preview_id;
 
         previewSender.textContent =
             fixedSenderEmail
@@ -900,15 +904,79 @@ async function requestPreview() {
     }
 }
 
+function convertJobToUiResult(job) {
+    return {
+        sender:
+            job.sender
+            || fixedSenderEmail,
+
+        total:
+            job.total,
+
+        successful:
+            job.accepted,
+
+        failed:
+            job.total
+            - job.accepted,
+
+        results:
+            job.results.map(
+                (result) => ({
+                    source_row:
+                        result.source_row,
+
+                    name:
+                        result.name,
+
+                    success:
+                        result.status
+                        === "accepted",
+
+                    detail:
+                        result.detail
+                        || (
+                            result.status
+                            === "accepted"
+                                ? "Email accepted by Microsoft Graph."
+                                : result.status
+                                    === "authentication_required"
+                                    ? "Microsoft sign-in is required before this route can continue."
+                                    : result.status
+                                        === "unknown"
+                                        ? "Email outcome is unknown and requires review."
+                                        : result.status
+                                            === "pending"
+                                            ? "Email is pending."
+                                            : "Email was not accepted."
+                        ),
+                })
+            ),
+    };
+}
+
 async function sendEmails() {
-    if (!currentPayload) {
+    if (
+        !currentPreviewId
+        || isSending
+    ) {
         return;
     }
+
+    isSending = true;
+
+    sessionStorage.setItem(
+        "pending_send_preview_id",
+        currentPreviewId
+    );
 
     sendButton.disabled =
         true;
 
     previewBack.disabled =
+        true;
+
+    previewClose.disabled =
         true;
 
     sendButton.textContent =
@@ -927,9 +995,10 @@ async function sendEmails() {
                         "Content-Type":
                             "application/json",
                     },
-                    body: JSON.stringify(
-                        currentPayload
-                    ),
+                    body: JSON.stringify({
+                        preview_id:
+                            currentPreviewId,
+                    }),
                 }
             );
 
@@ -939,6 +1008,7 @@ async function sendEmails() {
             window.location.replace(
                 "/auth/login"
             );
+
             return;
         }
 
@@ -946,6 +1016,16 @@ async function sendEmails() {
             await response.json();
 
         if (!response.ok) {
+            if (
+                response.status === 404
+                || response.status === 409
+                || response.status === 422
+            ) {
+                sessionStorage.removeItem(
+                    "pending_send_preview_id"
+                );
+            }
+
             throw new Error(
                 typeof data.detail === "string"
                     ? data.detail
@@ -953,9 +1033,26 @@ async function sendEmails() {
             );
         }
 
-        renderResults(data);
-        closeModal(previewModal);
-        openModal(resultsModal);
+        sessionStorage.removeItem(
+            "pending_send_preview_id"
+        );
+
+        const uiResult =
+            convertJobToUiResult(
+                data
+            );
+
+        renderResults(
+            uiResult
+        );
+
+        closeModal(
+            previewModal
+        );
+
+        openModal(
+            resultsModal
+        );
 
     } catch (error) {
         console.error(
@@ -968,7 +1065,12 @@ async function sendEmails() {
             || "Email sending failed.";
 
     } finally {
+        isSending = false;
+
         previewBack.disabled =
+            false;
+
+        previewClose.disabled =
             false;
 
         sendButton.textContent =
@@ -1306,6 +1408,10 @@ emailForm.addEventListener(
 previewClose.addEventListener(
     "click",
     () => {
+        if (isSending) {
+            return;
+        }
+
         closeModal(
             previewModal
         );
@@ -1315,6 +1421,10 @@ previewClose.addEventListener(
 previewBack.addEventListener(
     "click",
     () => {
+        if (isSending) {
+            return;
+        }
+
         closeModal(
             previewModal
         );
@@ -1343,6 +1453,10 @@ document.addEventListener(
     "keydown",
     (event) => {
         if (event.key === "Escape") {
+            if (isSending) {
+                return;
+            }
+
             closeRecipientPicker();
             closeModal(previewModal);
             closeModal(resultsModal);

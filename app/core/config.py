@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     companies_file: Path = Path("data/3rd Party- Ticket Support.xlsx")
 
+    send_job_db_file: Path = Path("app_data/send_jobs.sqlite3")
+
     microsoft_client_id: str | None = None
     microsoft_client_secret: str | None = None
 

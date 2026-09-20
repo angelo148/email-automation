@@ -1,3 +1,7 @@
+from datetime import datetime
+from enum import StrEnum
+from uuid import UUID
+
 from pydantic import (
     BaseModel,
     EmailStr,
@@ -102,3 +106,82 @@ class EmailSendResponse(BaseModel):
     failed: int
 
     results: list[EmailSendResult]
+
+
+class EmailRouteStatus(StrEnum):
+    """Persistent state of one recipient route."""
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+    AUTHENTICATION_REQUIRED = "authentication_required"
+
+
+class EmailJobStatus(StrEnum):
+    """Overall state of one email send operation."""
+
+    SENDING = "sending"
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    AUTHENTICATION_REQUIRED = "authentication_required"
+    NEEDS_REVIEW = "needs_review"
+
+
+class SavedEmailPreview(BaseModel):
+    """Immutable server-side snapshot reviewed by the user."""
+
+    preview_id: UUID
+
+    sender: EmailStr | None = None
+
+    subject: str
+    content: str
+
+    workbook_version: str
+
+    recipient_count: int
+    recipients: list[EmailPreviewRecipient]
+
+    created_at: datetime
+
+
+class EmailSendByPreviewRequest(BaseModel):
+    """Request to send an already reviewed preview."""
+
+    preview_id: UUID
+
+
+class EmailJobRouteResult(BaseModel):
+    """Persistent result for one route in a send job."""
+
+    route_index: int
+    source_row: int
+    name: str
+
+    status: EmailRouteStatus
+    detail: str | None = None
+
+
+class EmailJobResponse(BaseModel):
+    """Current persistent state of a send job."""
+
+    job_id: UUID
+    preview_id: UUID
+
+    sender: EmailStr | None = None
+
+    status: EmailJobStatus
+
+    total: int
+    pending: int
+    accepted: int
+    failed: int
+    unknown: int
+    authentication_required: int
+
+    results: list[EmailJobRouteResult]
+
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None

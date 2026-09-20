@@ -82,6 +82,12 @@ def email_excel_file(
         file_path,
     )
 
+    monkeypatch.setattr(
+        email_routes,
+        "SEND_JOB_DB_FILE",
+        tmp_path / "send_jobs.sqlite3",
+    )
+
     return file_path
 
 
@@ -103,6 +109,10 @@ def test_preview_resolves_selected_recipients(
     assert response.status_code == 200
 
     body = response.json()
+
+    assert body["preview_id"]
+    assert body["workbook_version"]
+    assert body["created_at"]
 
     assert body["sender"] == FIXED_SENDER
     assert body["subject"] == "Ticket Support"

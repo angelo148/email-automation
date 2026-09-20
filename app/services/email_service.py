@@ -1,17 +1,26 @@
-import httpx  # noqa: F401
+from pathlib import Path
+from uuid import UUID
 
 from app.core.logging import get_logger
 from app.schemas.company import CompanyRecord
 from app.schemas.email import (
+    EmailJobResponse,
     EmailPreviewRecipient,
     EmailPreviewRequest,
     EmailPreviewResponse,
+    EmailRouteStatus,
     EmailSendRequest,
     EmailSendResponse,
     EmailSendResult,
+    SavedEmailPreview,
 )
 from app.services import graph_service
-
+from app.services.send_job_service import (
+    finalize_send_job,
+    get_send_job,
+    mark_pending_routes_authentication_required,
+    record_route_status,
+)
 
 logger = get_logger(__name__)
 
@@ -54,17 +63,12 @@ def build_email_preview(
         len(request.selected_company_rows),
     )
 
-    companies_by_row = {
-        company.source_row: company
-        for company in companies
-    }
+    companies_by_row = {company.source_row: company for company in companies}
 
     recipients: list[EmailPreviewRecipient] = []
 
     for source_row in request.selected_company_rows:
-        company = companies_by_row.get(
-            source_row
-        )
+        company = companies_by_row.get(source_row)
 
         if company is None:
             logger.warning(
@@ -83,8 +87,7 @@ def build_email_preview(
             )
 
             raise EmailPreviewError(
-                f"{company.name} cannot receive email: "
-                f"{company.unavailable_reason}"
+                f"{company.name} cannot receive email: " f"{company.unavailable_reason}"
             )
 
         recipients.append(
@@ -99,13 +102,9 @@ def build_email_preview(
         )
 
     if not recipients:
-        logger.warning(
-            "Preview rejected because no recipient routes were selected."
-        )
+        logger.warning("Preview rejected because no recipient routes were selected.")
 
-        raise EmailPreviewError(
-            "At least one recipient must be selected."
-        )
+        raise EmailPreviewError("At least one recipient must be selected.")
 
     return EmailPreviewResponse(
         sender=sender_email,
@@ -134,14 +133,10 @@ async def _get_sender_email(
         )
 
     except graph_service.GraphAuthenticationError as exc:
-        raise EmailAuthenticationError(
-            str(exc)
-        ) from exc
+        raise EmailAuthenticationError(str(exc)) from exc
 
     except graph_service.GraphRequestError as exc:
-        raise EmailSendError(
-            str(exc)
-        ) from exc
+        raise EmailSendError(str(exc)) from exc
 
 
 async def _send_graph_email(
@@ -169,14 +164,10 @@ async def _send_graph_email(
         )
 
     except graph_service.GraphAuthenticationError as exc:
-        raise EmailAuthenticationError(
-            str(exc)
-        ) from exc
+        raise EmailAuthenticationError(str(exc)) from exc
 
     except graph_service.GraphRequestError as exc:
-        raise EmailSendError(
-            str(exc)
-        ) from exc
+        raise EmailSendError(str(exc)) from exc
 
 
 async def send_selected_emails(
@@ -212,15 +203,9 @@ async def send_selected_emails(
     results: list[EmailSendResult] = []
 
     for recipient in preview.recipients:
-        to_addresses = [
-            str(address)
-            for address in recipient.to
-        ]
+        to_addresses = [str(address) for address in recipient.to]
 
-        cc_addresses = [
-            str(address)
-            for address in recipient.cc
-        ]
+        cc_addresses = [str(address) for address in recipient.cc]
 
         try:
             await _send_graph_email(
@@ -261,16 +246,9 @@ async def send_selected_emails(
             )
         )
 
-    successful = sum(
-        1
-        for result in results
-        if result.success
-    )
+    successful = sum(1 for result in results if result.success)
 
-    failed = (
-        len(results)
-        - successful
-    )
+    failed = len(results) - successful
 
     return EmailSendResponse(
         sender=sender_email,
@@ -278,4 +256,190 @@ async def send_selected_emails(
         successful=successful,
         failed=failed,
         results=results,
+    )
+
+
+async def send_saved_preview_job(
+    *,
+    preview: SavedEmailPreview,
+    job_id: UUID,
+    database_path: Path,
+    access_token: str,
+    fixed_sender_email: str,
+) -> EmailJobResponse:
+    """
+    Send an immutable saved preview and persist each route outcome.
+
+    Only routes still pending or waiting for authentication are eligible
+    for submission. Previously accepted routes are never submitted again.
+    """
+
+    job = get_send_job(
+        database_path=database_path,
+        job_id=job_id,
+    )
+
+    eligible_statuses = {
+        EmailRouteStatus.PENDING,
+        EmailRouteStatus.AUTHENTICATION_REQUIRED,
+    }
+
+    try:
+        sender_email = await _get_sender_email(
+            access_token=access_token,
+            expected_sender_email=fixed_sender_email,
+        )
+
+    except EmailAuthenticationError:
+        mark_pending_routes_authentication_required(
+            database_path=database_path,
+            job_id=job_id,
+        )
+
+        finalize_send_job(
+            database_path=database_path,
+            job_id=job_id,
+        )
+
+        return get_send_job(
+            database_path=database_path,
+            job_id=job_id,
+        )
+
+    except EmailSendError as exc:
+        for result in job.results:
+            if result.status not in eligible_statuses:
+                continue
+
+            record_route_status(
+                database_path=database_path,
+                job_id=job_id,
+                route_index=result.route_index,
+                status=EmailRouteStatus.FAILED,
+                detail=("Sender validation failed before submission: " f"{exc}"),
+            )
+
+        finalize_send_job(
+            database_path=database_path,
+            job_id=job_id,
+        )
+
+        return get_send_job(
+            database_path=database_path,
+            job_id=job_id,
+        )
+
+    if (
+        preview.sender is not None
+        and sender_email.casefold() != str(preview.sender).casefold()
+    ):
+        for result in job.results:
+            if result.status not in eligible_statuses:
+                continue
+
+            record_route_status(
+                database_path=database_path,
+                job_id=job_id,
+                route_index=result.route_index,
+                status=EmailRouteStatus.FAILED,
+                detail=(
+                    "The reviewed sender no longer matches "
+                    "the authenticated sender. Create a new preview."
+                ),
+            )
+
+        finalize_send_job(
+            database_path=database_path,
+            job_id=job_id,
+        )
+
+        return get_send_job(
+            database_path=database_path,
+            job_id=job_id,
+        )
+
+    route_statuses = {result.route_index: result.status for result in job.results}
+
+    logger.debug(
+        "Starting saved-preview send job %s for %d route(s).",
+        job_id,
+        preview.recipient_count,
+    )
+
+    for route_index, recipient in enumerate(preview.recipients):
+        current_status = route_statuses.get(route_index)
+
+        if current_status not in eligible_statuses:
+            continue
+
+        to_addresses = [str(address) for address in recipient.to]
+
+        cc_addresses = [str(address) for address in recipient.cc]
+
+        try:
+            await _send_graph_email(
+                access_token=access_token,
+                subject=preview.subject,
+                content=preview.content,
+                to_addresses=to_addresses,
+                cc_addresses=cc_addresses,
+            )
+
+        except EmailAuthenticationError as exc:
+            record_route_status(
+                database_path=database_path,
+                job_id=job_id,
+                route_index=route_index,
+                status=(EmailRouteStatus.AUTHENTICATION_REQUIRED),
+                detail=str(exc),
+            )
+
+            mark_pending_routes_authentication_required(
+                database_path=database_path,
+                job_id=job_id,
+            )
+
+            finalize_send_job(
+                database_path=database_path,
+                job_id=job_id,
+            )
+
+            return get_send_job(
+                database_path=database_path,
+                job_id=job_id,
+            )
+
+        except EmailSendError as exc:
+            logger.error(
+                "Email failed for saved-preview route " "'%s' (Excel row %d).",
+                recipient.name,
+                recipient.source_row,
+            )
+
+            record_route_status(
+                database_path=database_path,
+                job_id=job_id,
+                route_index=route_index,
+                status=EmailRouteStatus.FAILED,
+                detail=str(exc),
+            )
+
+            continue
+
+        record_route_status(
+            database_path=database_path,
+            job_id=job_id,
+            route_index=route_index,
+            status=EmailRouteStatus.ACCEPTED,
+            detail="Email accepted by Microsoft Graph.",
+        )
+
+    finalize_send_job(
+        database_path=database_path,
+        job_id=job_id,
+    )
+
+    return get_send_job(
+        database_path=database_path,
+        job_id=job_id,
     )
