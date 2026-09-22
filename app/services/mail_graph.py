@@ -166,6 +166,14 @@ async def move_message(token, message_id, destination):
     )
 
 
+async def delete_message(token, message_id):
+    return await request(
+        token,
+        "DELETE",
+        "/me/messages/" + quote(message_id, safe=""),
+    )
+
+
 async def mark_read(token, message_id, read):
     return await request(
         token,

@@ -7,11 +7,12 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>AI Email Automation</title>
+    <title>MailFlow</title>
+    <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
 
     <link
         rel="stylesheet"
-        href="{{ url_for('static', path='css/app.css') }}?v=0.2.2"
+        href="{{ url_for('static', path='css/app.css') }}?v=0.5.0"
     >
 </head>
 
@@ -19,15 +20,17 @@
     <div class="app-shell">
         <header class="topbar">
             <div class="brand-section">
-                <div class="brand-icon">AI</div>
+                <div class="brand-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M3.5 6.5h17v11h-17z"/><path d="m4 7 8 6 8-6"/><path d="M15.5 4.5h5M18.5 2l2.5 2.5L18.5 7"/></svg>
+                </div>
 
                 <div>
                     <h1 class="brand-title">
-                        AI Email Automation
+                        MailFlow
                     </h1>
 
                     <div class="brand-subtitle">
-                        Compose · review every recipient before sending
+                        Smart Email Automation · review every recipient before sending
                     </div>
                 </div>
             </div>
@@ -244,8 +247,8 @@
                             Subject
                         </label>
 
-                        <span class="form-hint">
-                            Maximum 200 characters
+                        <span class="form-hint" id="subject-count" aria-live="polite">
+                            0 / 200
                         </span>
                     </div>
 
@@ -300,6 +303,7 @@
                         <label id="schedule-interval-field" hidden>Every <span class="schedule-interval-box"><input id="schedule-interval" aria-label="Repeat interval" type="number" value="1" min="1" max="365"><span id="schedule-unit">day</span></span></label>
                         <label id="schedule-end-field" hidden>Ends on (optional) <input type="date" id="schedule-end"></label>
                     </div>
+                    <p id="schedule-live-summary" class="schedule-live-summary" aria-live="polite">Choose a date and time to review the schedule.</p>
                 </section>
                 <div class="form-actions">
                     <button type="button" class="small-button" id="draft-action">Save as draft</button>
@@ -487,6 +491,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', path='js/app.js') }}?v=0.2.2"></script>
+    <script src="{{ url_for('static', path='js/app.js') }}?v=0.5.0"></script>
 </body>
 </html>

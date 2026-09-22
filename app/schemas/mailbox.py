@@ -43,6 +43,12 @@ class SubmitPreview(BaseModel):
     draft_revision: int | None = Field(default=None, ge=1)
 
 
+class ScheduleEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    schedule: ScheduleRule
+    revision: int = Field(ge=1)
+
+
 class DraftInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     selected_company_rows: list[int] = Field(default_factory=list, max_length=100)
@@ -63,7 +69,7 @@ class MessageAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["graph", "draft", "job"]
     id: str = Field(min_length=1, max_length=2048)
-    action: Literal["trash", "restore", "read", "unread", "resume", "pause"]
+    action: Literal["trash", "restore", "delete", "read", "unread", "resume", "pause"]
     destination: Literal["inbox", "sentitems"] | None = None
 
 

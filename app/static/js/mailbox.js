@@ -4,7 +4,9 @@ const folderNames = {inbox: "Inbox", outbox: "Outbox", sent: "Sent", drafts: "Dr
 const descriptions = {inbox: "Incoming conversations", outbox: "Scheduled and pending messages", sent: "Your sent conversations", drafts: "Ideas waiting to be sent", trash: "Deleted messages · restore when needed"};
 let folder = "inbox", messages = [], nextCursor = null, generation = 0, refreshing = false;
 let searchTimer;
+let editingSchedule = null;
 const selected = new Set();
+const pendingActions = new Set();
 const key = (item) => `${item.kind}:${item.id}`;
 const trashIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 10v7 M14 10v7"/></svg>';
 const restoreIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9a8 8 0 1 1 0 8 M4 3v6h6"/></svg>';
@@ -19,20 +21,67 @@ async function api(url, method = "GET", body) {
     }
     return data;
 }
-function notice(text, connect = false) {
+function notice(text) {
     const element = $("mail-notice");
     element.textContent = text || "";
     element.hidden = !text;
-    if (connect) {
-        const a = document.createElement("a");
-        a.href = "/auth/login"; a.textContent = "Connect Microsoft";
-        element.append(a);
-    }
+    element.classList.toggle("connection-warning", !!text);
+}
+function setConnection(connected, title) {
+    const dot = $("connection-dot");
+    dot.className = `connection-dot ${connected === null ? "checking" : connected ? "connected" : "offline"}`;
+    dot.title = title; dot.setAttribute("aria-label", title);
 }
 let toastTimeout;
-function toast(text) {
-    $("toast").textContent = text; $("toast").hidden = false;
-    clearTimeout(toastTimeout); toastTimeout = setTimeout(() => $("toast").hidden = true, 6000);
+function toast(text, actionLabel, action, duration = 6000) {
+    const element = $("toast"); element.replaceChildren(document.createTextNode(text));
+    if (actionLabel && action) {
+        const actionButton = document.createElement("button"); actionButton.type = "button"; actionButton.textContent = actionLabel;
+        actionButton.addEventListener("click", async () => {actionButton.disabled = true; clearTimeout(toastTimeout); try {await action();} catch (error) {toast(error.message);}});
+        element.append(actionButton);
+    }
+    element.hidden = false;
+    clearTimeout(toastTimeout); toastTimeout = setTimeout(() => element.hidden = true, duration);
+}
+function confirmPermanentDelete(count) {
+    const dialog = $("delete-confirm-dialog");
+    $("delete-confirm-title").textContent = `Permanently delete ${count === 1 ? "message" : `${count} messages`}?`;
+    dialog.returnValue = "cancel"; dialog.showModal();
+    return new Promise(resolve => dialog.addEventListener("close", () => resolve(dialog.returnValue === "delete"), {once:true}));
+}
+function confirmResumeSchedule() {
+    const dialog = $("resume-confirm-dialog");
+    dialog.returnValue = "cancel"; dialog.showModal();
+    return new Promise(resolve => dialog.addEventListener("close", () => resolve(dialog.returnValue === "resume"), {once:true}));
+}
+function actionResultMessage(action, total, failures, items = []) {
+    const succeeded = total - failures.length;
+    if (failures.length) {
+        const verb = {trash:"moved",restore:"restored",delete:"deleted",read:"marked read",unread:"marked unread",pause:"paused",resume:"resumed"}[action] || "completed";
+        return `${succeeded} ${verb}, ${failures.length} failed. ${failures[0].detail || "Try again."}`;
+    }
+    if (action === "restore") {
+        const hasJobs = items.some(item => item.kind === "job");
+        const hasOtherMessages = items.some(item => item.kind !== "job");
+        if (hasJobs && hasOtherMessages) return "Messages restored. Outbox schedules remain paused until resumed.";
+        if (hasJobs) return "Schedule restored. It remains paused until resumed.";
+        return total === 1 ? "Message restored." : `${total} messages restored.`;
+    }
+    return {delete:"Permanently deleted.",pause:"Schedule paused.",resume:"Sending resumed.",read:"Marked as read.",unread:"Marked as unread."}[action];
+}
+async function undoTrash(items) {
+    const itemKeys = items.map(key);
+    if (itemKeys.some(itemKey => pendingActions.has(itemKey))) return;
+    itemKeys.forEach(itemKey => pendingActions.add(itemKey));
+    try {
+        const result = await api("/mail/actions", "POST", {items: items.map(item => ({kind:item.kind,id:item.id,action:"restore"}))});
+        const failure = result.results.find(entry => !entry.ok);
+        if (failure) throw new Error(failure.detail || "The message could not be restored.");
+        toast(items.length === 1 ? "Message restored." : `${items.length} messages restored.`);
+        await loadFolder(false, true);
+    } finally {
+        itemKeys.forEach(itemKey => pendingActions.delete(itemKey));
+    }
 }
 function dateLabel(value) {
     const date = new Date(value);
@@ -40,6 +89,11 @@ function dateLabel(value) {
     return date.toDateString() === new Date().toDateString()
         ? date.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})
         : date.toLocaleDateString([], {day: "numeric", month: "short"});
+}
+function nextSendLabel(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.valueOf())) return "Next send unavailable";
+    return `Next: ${date.toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}`;
 }
 function button(text, action, className = "") {
     const b = document.createElement("button");
@@ -52,9 +106,18 @@ function button(text, action, className = "") {
     return b;
 }
 function updateSelection() {
-    $("selection-count").textContent = selected.size ? `${selected.size} selected` : "";
-    $("delete-selected").hidden = !selected.size || folder === "trash";
-    $("restore-selected").hidden = !selected.size || folder !== "trash";
+    const selectedItems = messages.filter(item => selected.has(key(item)));
+    const hasSelection = selectedItems.length > 0;
+    $("selection-count").textContent = hasSelection ? `${selectedItems.length} selected` : "";
+    $("delete-selected").hidden = !hasSelection || folder === "trash";
+    $("restore-selected").hidden = !hasSelection || folder !== "trash";
+    $("permanently-delete-selected").hidden = folder !== "trash";
+    $("permanently-delete-selected").disabled = !hasSelection;
+    const canMark = hasSelection && ["inbox", "sent"].includes(folder) && selectedItems.every(item => item.kind === "graph");
+    $("mark-read-selected").hidden = !canMark || !selectedItems.some(item => !item.is_read);
+    $("mark-unread-selected").hidden = !canMark || !selectedItems.some(item => item.is_read);
+    $("clear-selection").hidden = !hasSelection;
+    document.querySelector(".mail-toolbar").classList.toggle("selection-active", hasSelection);
     $("select-messages").checked = !!messages.length && messages.every(m => selected.has(key(m)));
     $("select-messages").indeterminate = !!selected.size && !$("select-messages").checked;
 }
@@ -63,6 +126,7 @@ function render() {
     for (const item of messages) {
         const row = document.createElement("div");
         row.className = `message-row${!item.is_read ? " unread" : ""}${selected.has(key(item)) ? " selected" : ""}`;
+        row.dataset.messageKey = key(item);
         const check = document.createElement("input"); check.type = "checkbox";
         check.setAttribute("aria-label", `Select ${item.subject || "untitled draft"}`);
         check.checked = selected.has(key(item));
@@ -76,17 +140,29 @@ function render() {
         text.append(subject, snippet); open.append(sender, text);
         row.append(check, open);
         if (item.kind === "job") {
+            const scheduleKind = document.createElement("span");
+            const recurring = item.schedule && item.schedule.frequency !== "once";
+            scheduleKind.className = `schedule-kind${recurring ? " recurring" : ""}`;
+            scheduleKind.textContent = recurring ? "Recurring" : item.schedule ? "One-time" : "Send now";
+            row.append(scheduleKind);
             const status = document.createElement("span");
             status.className = "status-pill" + (["partial", "paused", "authentication_required", "needs_review"].includes(item.status) ? " problem" : "");
             status.textContent = item.status.replaceAll("_", " "); row.append(status);
         }
-        const date = document.createElement("span"); date.className = "message-date"; date.textContent = dateLabel(item.date); date.title = new Date(item.date).toLocaleString(); row.append(date);
+        const date = document.createElement("span"); date.className = `message-date${folder === "outbox" && item.kind === "job" ? " next-send" : ""}`; date.textContent = folder === "outbox" && item.kind === "job" ? nextSendLabel(item.date) : dateLabel(item.date); date.title = new Date(item.date).toLocaleString(); row.append(date);
         const actions = document.createElement("div"); actions.className = "row-actions";
-        const action = folder === "trash" ? "restore" : "trash";
-        const remove = button("", () => act([item], action), "icon-button");
-        remove.innerHTML = action === "restore" ? restoreIcon : trashIcon;
-        remove.title = action === "restore" ? "Restore" : "Move to Trash"; remove.setAttribute("aria-label", remove.title);
-        actions.append(remove); row.append(actions); list.append(row);
+        if (folder === "trash") {
+            const restore = button("", () => act([item], "restore"), "icon-button");
+            restore.innerHTML = restoreIcon; restore.title = "Restore"; restore.setAttribute("aria-label", restore.title);
+            const permanentlyDelete = button("", () => act([item], "delete"), "icon-button permanent-delete");
+            permanentlyDelete.innerHTML = trashIcon; permanentlyDelete.title = "Delete permanently"; permanentlyDelete.setAttribute("aria-label", permanentlyDelete.title);
+            actions.append(restore, permanentlyDelete);
+        } else {
+            const remove = button("", () => act([item], "trash"), "icon-button");
+            remove.innerHTML = trashIcon; remove.title = "Move to Trash"; remove.setAttribute("aria-label", remove.title);
+            actions.append(remove);
+        }
+        row.append(actions); list.append(row);
     }
     $("message-count").textContent = `${messages.length}${nextCursor ? "+" : ""} ${messages.length === 1 ? "message" : "messages"}`;
     $("mail-empty").hidden = !!messages.length;
@@ -109,10 +185,14 @@ async function loadFolder(append = false, quiet = false) {
         nextCursor = result.next_cursor;
         const currentKeys = new Set(messages.map(key));
         for (const id of selected) if (!currentKeys.has(id)) selected.delete(id);
-        notice(result.warning, !!result.warning); render();
+        if (["inbox", "sent", "trash"].includes(folder)) {
+            setConnection(!result.warning, result.warning ? "Microsoft Graph is temporarily unavailable" : "Microsoft mailbox connected");
+        }
+        notice(result.warning ? "Microsoft mailbox is temporarily unavailable. Local drafts and scheduled messages remain safe." : ""); render();
     } catch (error) {
         if (requestGeneration !== generation) return;
-        notice(error.message, error.status === 401);
+        if (["inbox", "sent", "trash"].includes(folder)) setConnection(false, "Microsoft Graph is unavailable");
+        notice(error.status === 401 ? "The saved Microsoft session needs attention. Your local drafts and schedules remain safe." : "Microsoft mailbox is temporarily unavailable. Check your connection and try Refresh.");
         if (!quiet) {messages = []; nextCursor = null; render();}
     } finally {
         if (requestGeneration === generation) {refreshing = false; $("refresh-mail").disabled = false;}
@@ -121,8 +201,9 @@ async function loadFolder(append = false, quiet = false) {
 async function switchFolder(next) {
     folder = next; messages = []; nextCursor = null; selected.clear(); $("mail-search").value = "";
     $("folder-title").textContent = folderNames[folder]; $("folder-description").textContent = descriptions[folder];
-    document.title = `${folderNames[folder]} · AI Email Automation`;
+    document.title = `${folderNames[folder]} · MailFlow`;
     document.querySelectorAll("[data-folder]").forEach(b => {b.classList.toggle("active", b.dataset.folder === folder); if (b.dataset.folder === folder) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");});
+    updateSelection();
     await loadFolder();
 }
 async function act(items, action, destination) {
@@ -131,23 +212,126 @@ async function act(items, action, destination) {
         await openItem(items.find(i => i.kind === "graph" && !i.original_folder));
         toast("Choose a destination for messages deleted outside this app."); return;
     }
-    if (action === "resume" && !confirm("Send the remaining eligible routes now and resume this recurring schedule? Accepted routes will be skipped.")) return;
-    const result = await api("/mail/actions", "POST", {items: items.map(i => ({kind:i.kind,id:i.id,action,...(destination ? {destination} : {})}))});
+    if (action === "resume" && !await confirmResumeSchedule()) return;
+    if (action === "delete" && !await confirmPermanentDelete(items.length)) return;
+    const itemKeys = items.map(key);
+    if (itemKeys.some(itemKey => pendingActions.has(itemKey))) return;
+    itemKeys.forEach(itemKey => pendingActions.add(itemKey));
+    const optimistic = action === "trash" || action === "delete";
+    const previousMessages = messages;
+    const previousSelection = new Set(selected);
+    if (optimistic) {
+        const removed = new Set(itemKeys);
+        document.querySelectorAll(".message-row").forEach(row => {if (removed.has(row.dataset.messageKey)) row.classList.add("removing");});
+        await new Promise(resolve => setTimeout(resolve, 170));
+        messages = messages.filter(item => !removed.has(key(item)));
+        for (const itemKey of removed) selected.delete(itemKey);
+        render();
+    }
+    const request = api("/mail/actions", "POST", {items: items.map(i => ({kind:i.kind,id:i.id,action,...(destination ? {destination} : {})}))});
+    if (action === "trash") {
+        toast(items.length === 1 ? "Message moved to Trash." : `${items.length} messages moved to Trash.`, "Undo", async () => {await request; await undoTrash(items);}, 5000);
+    }
+    let result;
+    try {
+        result = await request;
+    } catch (error) {
+        if (optimistic) {
+            messages = previousMessages;
+            selected.clear();
+            for (const itemKey of previousSelection) selected.add(itemKey);
+            render();
+        }
+        itemKeys.forEach(itemKey => pendingActions.delete(itemKey));
+        throw error;
+    }
     const failures = result.results.filter(r => !r.ok);
-    toast(failures.length ? `${result.results.length - failures.length} completed. ${failures[0].detail}` : {trash:"Moved to Trash. Pending sends are cancelled.",restore:"Restored. Outbox schedules remain paused until resumed.",pause:"Schedule paused.",resume:"Sending resumed.",read:"Marked as read.",unread:"Marked as unread."}[action]);
+    if (action !== "trash" || failures.length) {
+        toast(actionResultMessage(action, result.results.length, failures, items));
+    }
+    if (!failures.length && items.some(item => item.kind === "graph")) setConnection(true, "Microsoft mailbox connected");
     if (!failures.length) $("message-dialog").close();
-    await loadFolder();
+    itemKeys.forEach(itemKey => pendingActions.delete(itemKey));
+    if (!optimistic || failures.length) await loadFolder();
 }
 function scheduleText(item) {
-    if (!item.schedule) return item.kind === "job" ? `Send time: ${new Date(item.date).toLocaleString()}` : "";
+    if (!item.schedule) return item.kind === "job" ? `Send now · Next attempt: ${new Date(item.date).toLocaleString()}` : "";
     const r = item.schedule;
-    return `${r.frequency === "once" ? "One-time send" : `Every ${r.interval} ${r.frequency === "daily" ? "day(s)" : r.frequency === "weekly" ? "week(s)" : "month(s)"}`} · ${r.start.replace("T", " ")} · ${r.timezone}${r.end_date ? ` · Ends ${r.end_date}` : ""}\nApproved recipients are saved with this schedule.`;
+    const unit = {daily:"day",weekly:"week",monthly:"month"}[r.frequency];
+    const cadence = r.frequency === "once" ? "One-time send" : `Recurring · Every ${r.interval} ${unit}${r.interval === 1 ? "" : "s"}`;
+    return `${cadence} · Next send: ${new Date(item.date).toLocaleString()} · ${r.timezone}${r.end_date ? ` · Ends ${r.end_date}` : ""}\nApproved recipient addresses are locked to this schedule.`;
+}
+function scheduleParts(schedule) {
+    const start = String(schedule?.start || "");
+    return {date: start.slice(0, 10), time: start.slice(11, 16)};
+}
+function updateScheduleEditFields() {
+    const recurring = $("edit-frequency").value !== "once";
+    $("edit-interval-wrap").hidden = !recurring;
+    $("edit-end-date-wrap").hidden = !recurring;
+    const interval = $("edit-interval");
+    interval.disabled = !recurring;
+    if (!recurring) interval.value = "1";
+    const endDate = $("edit-end-date");
+    endDate.disabled = !recurring;
+    if (!recurring) endDate.value = "";
+    updateScheduleEditSummary();
+}
+function updateScheduleEditSummary() {
+    const date = $("edit-start-date").value;
+    const time = $("edit-start-time").value;
+    const timezone = $("edit-timezone").value.trim() || "the selected timezone";
+    const frequency = $("edit-frequency").value;
+    if (!date || !time) {$("edit-schedule-summary").textContent = "Choose a future date and time."; return;}
+    const cadence = frequency === "once" ? "One-time send" : `Every ${$("edit-interval").value || 1} ${({daily:"day",weekly:"week",monthly:"month"}[frequency])}${Number($("edit-interval").value || 1) === 1 ? "" : "s"}`;
+    $("edit-schedule-summary").textContent = `${cadence} · ${date} at ${time} · ${timezone}`;
+}
+function openScheduleEditor(data) {
+    if (!data.schedule) return;
+    editingSchedule = data;
+    const parts = scheduleParts(data.schedule);
+    $("edit-start-date").value = parts.date;
+    $("edit-start-time").value = parts.time;
+    $("edit-timezone").value = data.schedule.timezone || "Asia/Beirut";
+    $("edit-frequency").value = data.schedule.frequency || "once";
+    $("edit-interval").value = data.schedule.interval || 1;
+    $("edit-end-date").value = data.schedule.end_date || "";
+    updateScheduleEditFields();
+    $("schedule-edit-dialog").showModal();
+}
+async function saveScheduleEdit() {
+    if (!editingSchedule) return;
+    const date = $("edit-start-date").value;
+    const time = $("edit-start-time").value;
+    const frequency = $("edit-frequency").value;
+    if (!date || !time || !$("edit-timezone").value.trim()) {toast("Choose a date, time, and timezone."); return;}
+    const schedule = {
+        start: `${date}T${time}`,
+        timezone: $("edit-timezone").value.trim(),
+        frequency,
+        interval: frequency === "once" ? 1 : Math.max(1, Number($("edit-interval").value || 1)),
+        end_date: frequency === "once" || !$("edit-end-date").value ? null : $("edit-end-date").value,
+    };
+    const button = $("save-schedule-edit"); button.disabled = true;
+    try {
+        await api(`/mail/jobs/${editingSchedule.id}/schedule`, "PUT", {schedule, revision: editingSchedule.revision});
+        $("schedule-edit-dialog").close(); $("message-dialog").close();
+        toast("Schedule updated.");
+        await loadFolder();
+    } catch (error) {toast(error.message);}
+    finally {button.disabled = false;}
 }
 async function openItem(item) {
     if (item.kind === "draft" && folder !== "trash") {openCompose(item.id); return;}
     let data = item;
     if (item.kind === "graph") data = {...item, ...await api(`/mail/message?id=${encodeURIComponent(item.id)}`)};
-    if (item.kind === "job") data = await api(`/mail/jobs/${item.id}`);
+    if (item.kind === "job") {
+        data = await api(`/mail/jobs/${item.id}?current=1`);
+
+              if (data.id !== item.id) {
+                  await loadFolder(false, true);
+              }
+    }
     $("message-title").textContent = data.subject || "(No subject)";
     $("message-meta").textContent = `${data.sender || "Draft"}${data.sender_address ? ` <${data.sender_address}>` : ""}\n${new Date(data.date).toLocaleString()}${data.to?.length ? `\nTo: ${data.to.join(", ")}` : ""}${data.cc?.length ? `\nCC: ${data.cc.join(", ")}` : ""}`;
     $("message-schedule").textContent = scheduleText(data);
@@ -172,6 +356,7 @@ async function openItem(item) {
         if (data.kind === "job") {
             if (["queued", "sending", "retry"].includes(data.status)) actions.append(button("Pause schedule", () => act([data], "pause")));
             else if (["paused", "authentication_required", "needs_review"].includes(data.status)) actions.append(button("Resume remaining sends", () => act([data], "resume")));
+            if (data.schedule && ["queued", "paused", "retry", "authentication_required"].includes(data.status)) actions.append(button("Edit schedule", () => openScheduleEditor(data)));
         }
         if (data.kind === "graph") actions.append(button(data.is_read ? "Mark unread" : "Mark read", () => act([data], data.is_read ? "unread" : "read")));
         actions.append(button("Move to Trash", () => act([data], "trash")));
@@ -217,15 +402,27 @@ $("clear-search").addEventListener("click", () => {$("mail-search").value=""; se
 $("select-messages").addEventListener("change", e => {selected.clear(); if(e.target.checked) messages.forEach(i => selected.add(key(i))); render();});
 $("delete-selected").addEventListener("click", () => act(messages.filter(i => selected.has(key(i))), "trash").catch(e => toast(e.message)));
 $("restore-selected").addEventListener("click", () => act(messages.filter(i => selected.has(key(i))), "restore").catch(e => toast(e.message)));
+$("permanently-delete-selected").addEventListener("click", () => act(messages.filter(i => selected.has(key(i))), "delete").catch(e => toast(e.message)));
+$("mark-read-selected").addEventListener("click", () => act(messages.filter(i => selected.has(key(i)) && i.kind === "graph"), "read").then(() => {selected.clear(); updateSelection();}).catch(e => toast(e.message)));
+$("mark-unread-selected").addEventListener("click", () => act(messages.filter(i => selected.has(key(i)) && i.kind === "graph"), "unread").then(() => {selected.clear(); updateSelection();}).catch(e => toast(e.message)));
+$("clear-selection").addEventListener("click", () => {selected.clear(); render();});
 $("compose-button").addEventListener("click", () => openCompose());
 $("close-compose").addEventListener("click", closeCompose);
 $("compose-dialog").addEventListener("cancel", e => {e.preventDefault(); closeCompose();});
 $("close-message").addEventListener("click", () => $("message-dialog").close());
+$("edit-frequency").addEventListener("change", updateScheduleEditFields);
+["edit-start-date", "edit-start-time", "edit-timezone", "edit-interval", "edit-end-date"].forEach(id => $(id).addEventListener("input", updateScheduleEditSummary));
+$("schedule-edit-form").addEventListener("submit", event => {event.preventDefault(); saveScheduleEdit();});
+$("close-schedule-edit").addEventListener("click", () => $("schedule-edit-dialog").close());
+$("cancel-schedule-edit").addEventListener("click", () => $("schedule-edit-dialog").close());
+$("schedule-edit-dialog").addEventListener("click", event => {if (event.target === $("schedule-edit-dialog")) $("schedule-edit-dialog").close();});
+$("delete-confirm-dialog").addEventListener("click", event => {if (event.target === $("delete-confirm-dialog")) $("delete-confirm-dialog").close("cancel");});
+$("resume-confirm-dialog").addEventListener("click", event => {if (event.target === $("resume-confirm-dialog")) $("resume-confirm-dialog").close("cancel");});
 window.addEventListener("message", e => {
     if(e.origin !== location.origin || e.source !== $("compose-frame").contentWindow || e.data?.type !== "mail-saved") return;
     $("compose-dialog").close(); $("compose-frame").src="about:blank";
     toast(e.data.folder === "drafts" ? "Draft saved." : "Email added to Outbox."); switchFolder(e.data.folder);
 });
-api("/auth/status").then(s => {$("account-state").textContent = s.fixed_sender_email || "Microsoft mailbox"; $("connect-account").textContent = s.authenticated ? "Reconnect" : "Connect Microsoft";}).catch(() => {$("account-state").textContent="Not connected";});
+api("/auth/status").then(s => {$("account-state").textContent = s.fixed_sender_email || "Microsoft mailbox"; setConnection(s.authenticated, s.authenticated ? "Microsoft mailbox connected" : "Saved Microsoft session unavailable");}).catch(() => {$("account-state").textContent="Microsoft mailbox"; setConnection(false, "Microsoft connection status unavailable");});
 loadFolder().then(() => {const error = new URLSearchParams(location.search).get("auth_error"); if(error) notice(error, true);});
 setInterval(() => {if(!document.hidden && !refreshing && !selected.size && !$("compose-dialog").open && !$("message-dialog").open && !nextCursor) loadFolder(false,true);},30000);

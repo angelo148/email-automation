@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
-    app_name: str = "AI Email Automation"
+    app_name: str = "MailFlow"
     app_version: str = "0.2.0"
 
     environment: Literal[

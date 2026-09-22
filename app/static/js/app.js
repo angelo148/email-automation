@@ -54,6 +54,11 @@ const subjectInput =
         "subject"
     );
 
+const subjectCount =
+    document.getElementById(
+        "subject-count"
+    );
+
 const contentInput =
     document.getElementById(
         "content"
@@ -198,7 +203,7 @@ async function initializeMicrosoftAuth() {
     }
 
     if (!status.authenticated) {
-        showError("Connect your Microsoft account from the mailbox before sending. Drafts can be saved now.");
+        showError("The saved Microsoft session is unavailable. Drafts can still be saved while sign-in is restored.");
     }
 }
 
@@ -749,6 +754,71 @@ function readSchedule() {
         interval:document.getElementById("schedule-frequency").value === "once" ? 1 : Number(document.getElementById("schedule-interval").value),
         end_date:document.getElementById("schedule-frequency").value === "once" ? null : (document.getElementById("schedule-end").value || null)};
 }
+function formatScheduleDate(value, includeTime = false) {
+    const [datePart, timePart = "00:00"] = value.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute] = timePart.split(":").map(Number);
+    const date = new Date(year, month - 1, day, hour, minute);
+    if (Number.isNaN(date.valueOf())) return value;
+    return includeTime
+        ? date.toLocaleString([], {dateStyle:"medium", timeStyle:"short"})
+        : date.toLocaleDateString([], {dateStyle:"medium"});
+}
+function scheduleSummary(schedule) {
+    const recurring = schedule.frequency !== "once";
+    const unit = {daily:"day", weekly:"week", monthly:"month"}[schedule.frequency] || "day";
+    const cadence = schedule.interval === 1 ? `Every ${unit}` : `Every ${schedule.interval} ${unit}s`;
+    const title = recurring ? "Recurring schedule" : "One-time send";
+    const timing = recurring
+        ? `${cadence} · First send ${formatScheduleDate(schedule.start, true)}`
+        : formatScheduleDate(schedule.start, true);
+    const end = schedule.end_date ? ` · Ends ${formatScheduleDate(schedule.end_date)}` : "";
+    return {
+        title,
+        details: `${timing} · ${schedule.timezone}${end}. Approved recipient addresses are locked to this schedule.`,
+    };
+}
+function renderScheduleSummary(element, schedule) {
+    const summary = scheduleSummary(schedule);
+    const title = document.createElement("strong");
+    const details = document.createElement("span");
+    title.textContent = summary.title;
+    details.textContent = summary.details;
+    element.classList.add("schedule-summary-card");
+    element.replaceChildren(title, details);
+}
+function renderPreviewAction() {
+    const element = document.getElementById("preview-schedule");
+    if (currentSchedule) {
+        renderScheduleSummary(element, currentSchedule);
+        return;
+    }
+    element.classList.remove("schedule-summary-card");
+    element.textContent = composeIntent === "draft"
+        ? "Save this message for later. Saving a draft does not send it."
+        : "Send these exact recipients and content now.";
+}
+function updateLiveScheduleSummary() {
+    const element = document.getElementById("schedule-live-summary");
+    if (!document.getElementById("schedule-start").value) {
+        element.classList.remove("schedule-summary-card");
+        element.textContent = "Choose a date and time to review the schedule.";
+        return;
+    }
+    try {
+        const schedule = readSchedule();
+        if (!schedule.timezone) throw new Error("Enter a timezone to review the schedule.");
+        renderScheduleSummary(element, schedule);
+    } catch (error) {
+        element.classList.remove("schedule-summary-card");
+        element.textContent = error.message;
+    }
+}
+function updateSubjectCount() {
+    const length = subjectInput.value.length;
+    subjectCount.textContent = `${length} / 200`;
+    subjectCount.classList.toggle("subject-count-near-limit", length >= 180);
+}
 function draftPreview(payload) {
     return {sender:fixedSenderEmail, subject:payload.subject || "(No subject)", content:payload.content || "(No content yet)",
         recipient_count:payload.selected_company_rows.length,
@@ -779,9 +849,7 @@ async function requestPreview() {
         previewSubject.textContent = data.subject; previewContent.textContent = data.content;
         senderWarning.textContent = ""; sendButton.disabled = false;
         sendButton.textContent = {send:"Send now",schedule:"Confirm schedule",draft:"Save draft"}[composeIntent];
-        document.getElementById("preview-schedule").textContent = currentSchedule
-            ? `${currentSchedule.frequency === "once" ? "One time" : `Repeat ${currentSchedule.frequency}, every ${currentSchedule.interval}`} · Starts ${currentSchedule.start.replace("T"," ")} · ${currentSchedule.timezone}${currentSchedule.end_date ? ` · Ends ${currentSchedule.end_date}` : ""}. These exact recipient addresses will be used for every occurrence.`
-            : composeIntent === "draft" ? "Save this message for later. Saving a draft does not send it." : "Send these exact recipients and content now.";
+        renderPreviewAction();
         renderRecipients(data.recipients); closeRecipientPicker(); openModal(previewModal); sendButton.focus();
     } catch(error) {showError(error.message);}
     finally {previewBusy=false; continueButton.disabled=false;}
@@ -1222,11 +1290,12 @@ initializeMicrosoftAuth()
     });
 emailForm.addEventListener("input", () => {composeDirty=true;});
 recipientPicker.addEventListener("click", () => {composeDirty=true;});
+subjectInput.addEventListener("input", updateSubjectCount);
 window.addEventListener("beforeunload", event => {if (composeDirty) {event.preventDefault(); event.returnValue="";}});
 document.getElementById("draft-action").addEventListener("click", () => {composeIntent="draft"; requestPreview();});
 document.getElementById("schedule-action").addEventListener("click", () => {
     const panel=document.getElementById("schedule-panel");
-    if(panel.hidden) {panel.hidden=false; panel.scrollIntoView({block:"center"}); document.getElementById("schedule-start").focus({preventScroll:true}); return;}
+    if(panel.hidden) {panel.hidden=false; updateLiveScheduleSummary(); panel.scrollIntoView({block:"center"}); document.getElementById("schedule-start").focus({preventScroll:true}); return;}
     if(!emailForm.reportValidity()) return;
     composeIntent="schedule"; requestPreview();
 });
@@ -1240,18 +1309,24 @@ function updateScheduleFields() {
     document.getElementById("schedule-end").disabled = !recurring;
     const unit = {daily: "day", weekly: "week", monthly: "month"}[frequency] || "day";
     document.getElementById("schedule-unit").textContent = unit + (Number(interval.value) === 1 ? "" : "s");
+    updateLiveScheduleSummary();
 }
 document.getElementById("schedule-frequency").addEventListener("change", updateScheduleFields);
 document.getElementById("schedule-interval").addEventListener("input", updateScheduleFields);
-updateScheduleFields();
 document.getElementById("schedule-timezone").value=Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Beirut";
+for (const id of ["schedule-start", "schedule-hour", "schedule-minute", "schedule-period", "schedule-timezone", "schedule-end"]) {
+    const control = document.getElementById(id);
+    control.addEventListener(control.tagName === "SELECT" ? "change" : "input", updateLiveScheduleSummary);
+}
+updateSubjectCount();
+updateScheduleFields();
 (async () => {
     const id=new URLSearchParams(location.search).get("draft");
     if(!id) return;
     try {
         const d=await composeApi(`/mail/drafts/${encodeURIComponent(id)}`);
         if(d.folder !== "drafts") throw new Error("Restore this draft from Trash before editing.");
-        draftId=d.id; draftRevision=d.revision; subjectInput.value=d.subject; contentInput.value=d.content;
+        draftId=d.id; draftRevision=d.revision; subjectInput.value=d.subject; contentInput.value=d.content; updateSubjectCount();
         selectableOptions.forEach(o => setSelected(o,d.selected_company_rows.includes(Number(o.dataset.sourceRow))));
         defaultAllSelectionActive=false; updateSelectionUI();
         const missing=d.selected_company_rows.filter(row => !selectableOptions.some(o => Number(o.dataset.sourceRow)===row));

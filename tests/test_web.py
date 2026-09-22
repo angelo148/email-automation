@@ -112,7 +112,7 @@ def test_home_page_loads_multiselect(
 
     html = response.text
 
-    assert "AI Email Automation" in html
+    assert "MailFlow" in html
     assert 'id="company-search"' in html
     assert 'aria-label="Search by third party, group, or module"' in html
     assert "Select All" in html
