@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.routing import APIRoute
 
 from app.core.config import get_settings
-from app.schemas.mailbox import BulkAction, DraftInput, MessageAction, SubmitPreview, ScheduleEdit
+from app.schemas.mailbox import (
+    BulkAction,
+    DraftInput,
+    MessageAction,
+    ScheduleEdit,
+    SubmitPreview,
+)
 from app.services import mail_graph, microsoft_auth_service
 from app.services.mail_store import MailConflict, MailStore
 from app.services.send_job_service import calculate_workbook_version, get_preview
