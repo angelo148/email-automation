@@ -1,3 +1,6 @@
+# Schedule inputs intentionally use local times with a separate timezone.
+# ruff: noqa: DTZ001
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -355,7 +358,9 @@ def test_graph_trash_and_restore_keep_original_folder(client, store, monkeypatch
     assert store.origin("immutable-id")["folder_name"] == "Sent"
 
 
-def test_graph_message_can_be_permanently_deleted_from_trash(client, store, monkeypatch):
+def test_graph_message_can_be_permanently_deleted_from_trash(
+    client, store, monkeypatch
+):
     deleted = []
 
     async def token():

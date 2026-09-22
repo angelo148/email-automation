@@ -216,7 +216,7 @@ def _remove_non_fixed_accounts() -> None:
         if _normalized_email(username) != expected:
             try:
                 app.remove_account(account)
-            except Exception:
+            except Exception:  # noqa: BLE001 -- best-effort account cleanup
                 logger.warning(
                     "Could not remove an unexpected Microsoft account "
                     "from the local token cache."

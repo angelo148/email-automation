@@ -49,8 +49,12 @@ class MailStore:
                     folder_name TEXT NOT NULL, updated_at TEXT NOT NULL
                 );
             """)
-            if "revision" not in {r[1] for r in db.execute("PRAGMA table_info(mail_queue)")}:
-                db.execute("ALTER TABLE mail_queue ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+            if "revision" not in {
+                r[1] for r in db.execute("PRAGMA table_info(mail_queue)")
+            }:
+                db.execute(
+                    "ALTER TABLE mail_queue ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"
+                )
 
     @contextmanager
     def connect(self, write=False):
@@ -224,11 +228,27 @@ class MailStore:
             job_id = row["job_id"]
             if row["revision"] != revision:
                 raise MailConflict("This schedule changed. Reopen it before editing.")
-            if row["folder"] != "outbox" or row["status"] not in {"queued", "paused", "retry", "authentication_required"}:
-                raise MailConflict("This occurrence is sending, finished, or needs review. Refresh Outbox before editing.")
-            states = [r[0] for r in db.execute("SELECT status FROM send_job_routes WHERE job_id=?", (str(job_id),))]
-            if any(s in {"unknown", "failed", "sending"} for s in states) or all(s == "accepted" for s in states):
-                raise MailConflict("Review the recorded send outcomes before changing this schedule.")
+            if row["folder"] != "outbox" or row["status"] not in {
+                "queued",
+                "paused",
+                "retry",
+                "authentication_required",
+            }:
+                raise MailConflict(
+                    "This occurrence is sending, finished, or needs review. Refresh Outbox before editing."
+                )
+            states = [
+                r[0]
+                for r in db.execute(
+                    "SELECT status FROM send_job_routes WHERE job_id=?", (str(job_id),)
+                )
+            ]
+            if any(s in {"unknown", "failed", "sending"} for s in states) or all(
+                s == "accepted" for s in states
+            ):
+                raise MailConflict(
+                    "Review the recorded send outcomes before changing this schedule."
+                )
             due = occurrence(rule, 0)
             if due is None or due <= now_utc():
                 raise MailConflict("Choose a send time in the future.")
@@ -239,12 +259,24 @@ class MailStore:
             db.execute(
                 """UPDATE mail_queue SET rule_json=?,run_at=?,series_id=?,occurrence_index=0,
                 cancelled=?,revision=revision+1,detail=? WHERE job_id=?""",
-                (rule.model_dump_json(), stamp(due), series_id,
-                 1 if remains_paused else 0,
-                 "Schedule updated. Remains paused." if remains_paused else "Schedule updated.", str(job_id)),
+                (
+                    rule.model_dump_json(),
+                    stamp(due),
+                    series_id,
+                    1 if remains_paused else 0,
+                    (
+                        "Schedule updated. Remains paused."
+                        if remains_paused
+                        else "Schedule updated."
+                    ),
+                    str(job_id),
+                ),
             )
             if row["status"] == "retry":
-                db.execute("UPDATE send_jobs SET status='queued',completed_at=NULL WHERE job_id=?", (str(job_id),))
+                db.execute(
+                    "UPDATE send_jobs SET status='queued',completed_at=NULL WHERE job_id=?",
+                    (str(job_id),),
+                )
         return self.job(job_id)
 
     def job(self, job_id, current=False):
@@ -299,7 +331,9 @@ class MailStore:
                     raise LookupError("Draft not found.")
                 if action == "delete":
                     if row["folder"] != "trash":
-                        raise MailConflict("Only trashed drafts can be permanently deleted.")
+                        raise MailConflict(
+                            "Only trashed drafts can be permanently deleted."
+                        )
                     db.execute("DELETE FROM mail_drafts WHERE id=?", (item_id,))
                     return
                 if action not in {"trash", "restore"}:
@@ -309,13 +343,19 @@ class MailStore:
                     ("trash" if action == "trash" else "drafts", stamp(), item_id),
                 )
                 return
-            row = self._queue_row(db, item_id, current=action in {"trash", "pause", "resume"})
+            row = self._queue_row(
+                db, item_id, current=action in {"trash", "pause", "resume"}
+            )
             item_id = row["job_id"]
             if action == "delete":
                 if row["folder"] != "trash":
-                    raise MailConflict("Only trashed messages can be permanently deleted.")
+                    raise MailConflict(
+                        "Only trashed messages can be permanently deleted."
+                    )
                 if row["status"] == "sending":
-                    raise MailConflict("Cancellation is recorded. Wait for the in-flight request to finish before permanent deletion.")
+                    raise MailConflict(
+                        "Cancellation is recorded. Wait for the in-flight request to finish before permanent deletion."
+                    )
                 db.execute("DELETE FROM mail_queue WHERE job_id=?", (item_id,))
                 return item_id
             if action == "trash":
@@ -351,37 +391,53 @@ class MailStore:
                     (item_id,),
                 )
 
-                db.execute(
-                    "UPDATE send_jobs SET status='paused' WHERE job_id=?",
-                    (item_id,),
-                )
+                if row["status"] != "sending":
+                    db.execute(
+                        "UPDATE send_jobs SET status='paused' WHERE job_id=?",
+                        (item_id,),
+                    )
 
             elif action == "resume":
                 if row["folder"] != "outbox" or row["status"] == "sending":
                     raise MailConflict("This item cannot be resumed right now.")
+
                 states = [
                     r[0]
                     for r in db.execute(
-                        "SELECT status FROM send_job_routes WHERE job_id=?", (item_id,)
+                        "SELECT status FROM send_job_routes WHERE job_id=?",
+                        (item_id,),
                     )
                 ]
+
                 if any(s in {"unknown", "failed", "sending"} for s in states) or all(
                     s == "accepted" for s in states
                 ):
                     raise MailConflict(
                         "Review the recorded outcomes. This job cannot be automatically resent."
                     )
-                db.execute(
-                        "UPDATE mail_queue SET cancelled=0,detail='' WHERE job_id=?",
-                    (item_id,),
+
+                resume_at = max(
+                    datetime.fromisoformat(row["run_at"]),
+                    now_utc(),
                 )
+
+                db.execute(
+                    "UPDATE mail_queue SET cancelled=0,run_at=?,detail='' WHERE job_id=?",
+                    (stamp(resume_at), item_id),
+                )
+
                 db.execute(
                     "UPDATE send_jobs SET status='queued',completed_at=NULL WHERE job_id=?",
                     (item_id,),
                 )
+
             else:
                 raise MailConflict("This action is not available for an Outbox item.")
-            db.execute("UPDATE mail_queue SET revision=revision+1 WHERE job_id=?", (item_id,))
+
+            db.execute(
+                "UPDATE mail_queue SET revision=revision+1 WHERE job_id=?",
+                (item_id,),
+            )
             return item_id
 
     def recover_interrupted(self):
@@ -433,7 +489,9 @@ class MailStore:
                 "UPDATE send_jobs SET status='sending',started_at=? WHERE job_id=?",
                 (stamp(now), job_id),
             )
-            db.execute("UPDATE mail_queue SET revision=revision+1 WHERE job_id=?", (job_id,))
+            db.execute(
+                "UPDATE mail_queue SET revision=revision+1 WHERE job_id=?", (job_id,)
+            )
         return self.job(job_id)
 
     def begin_route(self, job_id, index):
@@ -466,7 +524,8 @@ class MailStore:
                 detail = q["detail"]
             db.execute("UPDATE send_jobs SET status=? WHERE job_id=?", (status, job_id))
             db.execute(
-                "UPDATE mail_queue SET detail=?,revision=revision+1 WHERE job_id=?", (detail, job_id)
+                "UPDATE mail_queue SET detail=?,revision=revision+1 WHERE job_id=?",
+                (detail, job_id),
             )
             if status == "retry":
                 db.execute(
@@ -493,21 +552,25 @@ class MailStore:
                     "SELECT status FROM send_job_routes WHERE job_id=?", (job_id,)
                 )
             ]
-            if q["cancelled"] or q["folder"] == "trash":
-                status = "cancelled" if q["folder"] == "trash" else "paused"
+            if q["folder"] == "trash":
+                status = "cancelled"
             elif "unknown" in states or "sending" in states:
                 status = "needs_review"
+            elif states and all(s == "accepted" for s in states):
+                status = "completed"
+            elif q["cancelled"]:
+                status = "paused"
             elif "failed" in states:
                 status = "partial"
-            elif all(s == "accepted" for s in states):
-                status = "completed"
             else:
                 status = "paused"
             db.execute(
                 "UPDATE send_jobs SET status=?,completed_at=? WHERE job_id=?",
                 (status, stamp(now), job_id),
             )
-            db.execute("UPDATE mail_queue SET revision=revision+1 WHERE job_id=?", (job_id,))
+            db.execute(
+                "UPDATE mail_queue SET revision=revision+1 WHERE job_id=?", (job_id,)
+            )
             if status != "completed":
                 return
             db.execute(
@@ -539,7 +602,19 @@ class MailStore:
                     stamp(now),
                 ),
             )
-            self._insert_job(db, preview_id, due, q["rule_json"], q["series_id"], index)
+            next_job_id = self._insert_job(
+                db, preview_id, due, q["rule_json"], q["series_id"], index
+            )
+
+            if q["cancelled"]:
+                db.execute(
+                    "UPDATE mail_queue SET cancelled=1,detail='Schedule paused.' WHERE job_id=?",
+                    (next_job_id,),
+                )
+                db.execute(
+                    "UPDATE send_jobs SET status='paused' WHERE job_id=?",
+                    (next_job_id,),
+                )
 
     def remember_origin(self, message_id, folder_id, folder_name):
         with self.connect(True) as db:

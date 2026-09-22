@@ -261,10 +261,29 @@ function scheduleText(item) {
     const cadence = r.frequency === "once" ? "One-time send" : `Recurring · Every ${r.interval} ${unit}${r.interval === 1 ? "" : "s"}`;
     return `${cadence} · Next send: ${new Date(item.date).toLocaleString()} · ${r.timezone}${r.end_date ? ` · Ends ${r.end_date}` : ""}\nApproved recipient addresses are locked to this schedule.`;
 }
-function scheduleParts(schedule) {
-    const start = String(schedule?.start || "");
-    return {date: start.slice(0, 10), time: start.slice(11, 16)};
+
+function scheduleParts(item) {
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+        timeZone: item.schedule.timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+    });
+
+    const parts = Object.fromEntries(
+        formatter.formatToParts(new Date(item.date))
+            .map(part => [part.type, part.value])
+    );
+
+    return {
+        date: `${parts.year}-${parts.month}-${parts.day}`,
+        time: `${parts.hour}:${parts.minute}`,
+    };
 }
+
 function updateScheduleEditFields() {
     const recurring = $("edit-frequency").value !== "once";
     $("edit-interval-wrap").hidden = !recurring;
@@ -289,7 +308,7 @@ function updateScheduleEditSummary() {
 function openScheduleEditor(data) {
     if (!data.schedule) return;
     editingSchedule = data;
-    const parts = scheduleParts(data.schedule);
+    const parts = scheduleParts(data);
     $("edit-start-date").value = parts.date;
     $("edit-start-time").value = parts.time;
     $("edit-timezone").value = data.schedule.timezone || "Asia/Beirut";
