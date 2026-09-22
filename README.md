@@ -1,4 +1,4 @@
-# AI Email Automation — mailbox update
+# MailFlow — smart email automation
 
 Built on the supplied `New WinRAR ZIP archive(3).zip` project. Python/FastAPI, Microsoft Graph, SQLite, and the existing Excel recipient picker.
 
@@ -19,7 +19,7 @@ Built on the supplied `New WinRAR ZIP archive(3).zip` project. Python/FastAPI, M
 3. In the activated virtual environment, run:
 
    ```powershell
-   python -m pip install -r requirements-dev.txt
+   python -m pip install -r requirements.txt
    python -m pytest -q
    ```
 
@@ -30,7 +30,7 @@ Built on the supplied `New WinRAR ZIP archive(3).zip` project. Python/FastAPI, M
    python start_app.py
    ```
 
-6. In the new mailbox, click **Reconnect** or **Connect Microsoft** and sign in with the configured sender account so the new permission is granted.
+6. If Microsoft requests consent for the new permission, open `http://localhost:8000/auth/login` once and sign in with the configured sender account. MailFlow then keeps the encrypted session and renews access silently whenever Microsoft permits it; the header intentionally shows only the mailbox address and connection-status dot.
 
 The update creates additional tables in the existing database on startup. Existing saved previews and send-job records are retained. The new mailbox queue owns its jobs; the old send endpoint cannot start a scheduled job early.
 
@@ -56,7 +56,7 @@ The recipient addresses, sender, subject, and body are saved when the preview is
 - A starting time that does not exist during a spring clock change is rejected. Later nonexistent occurrences are skipped. During a repeated autumn hour, the first occurrence is used once.
 - The end date is inclusive in the selected timezone.
 - Jobs more than five minutes late are paused for review by default, including jobs missed while the application was closed or the PC was asleep. Resuming sends remaining eligible routes now, then continues the original recurrence at the next future occurrence. Missed occurrences are not replayed in a burst.
-- Authentication failures preserve accepted routes. Reconnect, then resume the job from Outbox.
+- Authentication failures preserve accepted routes. If the header status dot reports that the saved session needs attention, open `/auth/login` once, then resume the job from Outbox.
 - A confirmed Microsoft 429 response is delayed according to Retry-After; accepted routes are skipped on the next attempt.
 - A lost send response or application interruption during submission leaves an uncertain outcome for review. The app does not automatically resend that route. Check Microsoft Sent and the route results before composing any remaining email.
 - Graph acceptance is not delivery confirmation. Delivery failures can still arrive later in Inbox.
@@ -78,13 +78,13 @@ The row trash icon or selection toolbar moves messages to Trash. Microsoft messa
 
 Deleting an Outbox item cancels its future sends. An already submitted request can still finish; deleting cannot recall an email Microsoft has accepted. Restoring returns the item to Outbox in a paused state. Use **Resume remaining sends** after reviewing its results. A completed occurrence can change while a page is open; refresh Outbox to act on the next occurrence.
 
-For messages deleted outside this app, the original folder may be unknown. The restore dialog lets you choose Inbox or Sent in that case. Drafts restore to Drafts. This release uses recoverable deletion only.
+For messages deleted outside this app, the original folder may be unknown. The restore dialog lets you choose Inbox or Sent in that case. Drafts restore to Drafts. Moving a message to Trash can be undone immediately. In Trash, the row icon or **Delete selected** permanently deletes messages after an in-app confirmation; permanent deletion cannot be undone.
 
 ## Checks and boundaries
 
 The automated suite includes the uploaded project's existing tests and new checks for queue concurrency, recurrence/DST, authentication interruption, uncertain outcomes, throttling, cancellation, stale previews, draft conflicts, and Microsoft folder restoration. Live HTTP calls are blocked in pytest; email operations use mocks.
 
-The UI was exercised in Chromium using a synthetic mailbox: preview/save/reopen draft, schedule, Outbox delete/restore, message reading, bulk Microsoft delete/restore, and mobile width. See `CHECKS.md` for the recorded results. Preview screenshots contain synthetic data.
+The UI checks cover preview/save/reopen draft, scheduling, Outbox delete/restore, message reading, bulk Microsoft delete/restore, permanent Trash deletion, and responsive controls.
 
 Validation was performed on Linux with Python 3.12. Windows DPAPI sign-in, real tenant/account consent, live Microsoft mailbox behavior, and real email delivery require a check in your installation. Existing FastAPI/AnyIO test-client deprecation warnings remain.
 

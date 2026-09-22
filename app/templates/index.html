@@ -3,18 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Inbox · AI Email Automation</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='css/mailbox.css') }}">
+  <title>Inbox · MailFlow</title>
+  <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/mailbox.css') }}?v=0.6.0">
 </head>
 <body>
   <header class="mail-header">
-    <a class="mail-brand" href="/" aria-label="AI Email Automation home"><span class="brand-mark">a</span><span>AI Mail<span class="brand-caption">AUTOMATION</span></span></a>
+    <a class="mail-brand" href="/" aria-label="MailFlow home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3.5 6.5h17v11h-17z"/><path d="m4 7 8 6 8-6"/><path d="M15.5 4.5h5M18.5 2l2.5 2.5L18.5 7"/></svg></span><span>MailFlow<span class="brand-caption">SMART EMAIL AUTOMATION</span></span></a>
     <form id="mail-search-form" class="mail-search" role="search">
       <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
       <input id="mail-search" aria-label="Search this folder" placeholder="Search this folder" autocomplete="off">
       <button type="button" id="clear-search" aria-label="Clear search">×</button>
     </form>
-    <div class="account"><span id="account-state">Connecting…</span><a href="/auth/login" id="connect-account">Connect Microsoft</a><span class="account-avatar" aria-hidden="true">A</span></div>
+    <div class="account"><span id="connection-dot" class="connection-dot checking" role="img" aria-label="Checking Microsoft connection" title="Checking Microsoft connection"></span><span id="account-state">Connecting…</span></div>
   </header>
   <div class="mail-layout">
     <aside class="mail-sidebar">
@@ -33,8 +34,12 @@
       <div class="mail-toolbar">
         <input type="checkbox" id="select-messages" aria-label="Select all loaded messages">
         <button class="icon-button" id="refresh-mail" title="Refresh" aria-label="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8a8 8 0 1 0 0 8 M20 3v5h-5"/></svg></button>
+        <button class="toolbar-button danger-button" id="permanently-delete-selected" title="Delete permanently" aria-label="Delete selected messages permanently" hidden disabled>Delete selected</button>
         <button class="toolbar-button" id="delete-selected" hidden>Delete selected</button>
         <button class="toolbar-button" id="restore-selected" hidden>Restore selected</button>
+        <button class="toolbar-button" id="mark-read-selected" hidden>Mark read</button>
+        <button class="toolbar-button" id="mark-unread-selected" hidden>Mark unread</button>
+        <button class="toolbar-button quiet-button" id="clear-selection" hidden>Clear</button>
         <span id="selection-count" aria-live="polite"></span>
         <span class="toolbar-spacer"></span><span id="message-count"></span>
       </div>
@@ -47,7 +52,41 @@
   <button id="compose-button" class="compose-button"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 16 12-12 4 4L8 20H4Z M14 6l4 4"/></svg>Compose</button>
   <dialog id="compose-dialog" aria-labelledby="compose-title"><div class="dialog-top"><h2 id="compose-title">New message</h2><button id="close-compose" class="icon-button" aria-label="Close compose">×</button></div><iframe id="compose-frame" title="Compose email"></iframe></dialog>
   <dialog id="message-dialog" aria-labelledby="message-title"><div class="dialog-top"><span>Message</span><button id="close-message" class="icon-button" aria-label="Close message">×</button></div><div class="message-detail"><h2 id="message-title"></h2><div id="message-meta"></div><div id="message-schedule"></div><pre id="message-body"></pre><div id="message-results"></div></div><div id="message-actions" class="dialog-actions"></div></dialog>
+  <dialog id="schedule-edit-dialog" class="schedule-edit-dialog" aria-labelledby="schedule-edit-title">
+    <form id="schedule-edit-form">
+      <div class="dialog-top"><h2 id="schedule-edit-title">Edit schedule</h2><button type="button" id="close-schedule-edit" class="icon-button" aria-label="Close edit schedule">×</button></div>
+      <div class="schedule-edit-body">
+        <p class="schedule-edit-intro">Update when this email should be sent. Recipients and message content stay unchanged.</p>
+        <div class="schedule-edit-grid">
+          <label>Send date<input id="edit-start-date" type="date" required></label>
+          <label>Send time<input id="edit-start-time" type="time" required></label>
+          <label>Timezone<input id="edit-timezone" type="text" required placeholder="Asia/Beirut" spellcheck="false"></label>
+          <label>Schedule<select id="edit-frequency"><option value="once">One-time</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
+          <label id="edit-interval-wrap">Repeat every<input id="edit-interval" type="number" min="1" max="365" value="1"></label>
+          <label id="edit-end-date-wrap">End date<input id="edit-end-date" type="date"></label>
+        </div>
+        <p id="edit-schedule-summary" class="schedule-edit-summary" aria-live="polite"></p>
+      </div>
+      <div class="dialog-actions"><button type="button" id="cancel-schedule-edit" class="toolbar-button">Cancel</button><button type="submit" id="save-schedule-edit" class="confirm-primary">Save schedule</button></div>
+    </form>
+  </dialog>
+  <dialog id="delete-confirm-dialog" class="confirm-dialog" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-text">
+    <form method="dialog">
+      <div class="confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h18 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 10v7 M14 10v7"/></svg></div>
+      <h2 id="delete-confirm-title">Permanently delete message?</h2>
+      <p id="delete-confirm-text">This action cannot be undone.</p>
+      <div class="confirm-actions"><button value="cancel" class="confirm-cancel" autofocus>Cancel</button><button value="delete" class="confirm-delete">Delete permanently</button></div>
+    </form>
+  </dialog>
+  <dialog id="resume-confirm-dialog" class="confirm-dialog" aria-labelledby="resume-confirm-title" aria-describedby="resume-confirm-text">
+    <form method="dialog">
+      <div class="confirm-icon resume-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7Z"/></svg></div>
+      <h2 id="resume-confirm-title">Resume this schedule?</h2>
+      <p id="resume-confirm-text">Remaining eligible recipients will be sent now. Previously accepted routes will be skipped.</p>
+      <div class="confirm-actions"><button value="cancel" class="confirm-cancel" autofocus>Cancel</button><button value="resume" class="confirm-primary">Resume schedule</button></div>
+    </form>
+  </dialog>
   <div id="toast" role="status" hidden></div>
-  <script src="{{ url_for('static', path='js/mailbox.js') }}?v=0.2.3"></script>
+  <script src="{{ url_for('static', path='js/mailbox.js') }}?v=0.6.0"></script>
 </body>
 </html>

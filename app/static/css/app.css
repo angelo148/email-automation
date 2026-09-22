@@ -89,8 +89,16 @@
             border-radius: 12px;
             background: var(--primary);
             color: #ffffff;
-            font-size: 19px;
-            font-weight: 800;
+        }
+
+        .brand-icon svg {
+            width: 29px;
+            height: 29px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
         .brand-title {
@@ -1236,3 +1244,8 @@
 .schedule-time-controls { display: flex; align-items: center; gap: 6px; }
 .schedule-time-controls select { flex: 1; min-width: 0; padding-left: 6px; padding-right: 4px; }
 @media(min-width:1000px) { .schedule-fields { grid-template-columns: 1.15fr 1.3fr 1.15fr 1fr; } }
+.subject-count-near-limit { color: #a35c1d !important; font-weight: 700; }
+.schedule-summary-card { display: grid; gap: 7px; padding: 12px 14px; border: 1px solid #dbe7f7; border-radius: 10px; background: #f7faff; }
+.schedule-summary-card strong { color: #315a91; font-size: 13px; }
+.schedule-summary-card span { color: #657993; font-size: 12px; line-height: 1.55; }
+.schedule-live-summary:not(.schedule-summary-card) { padding-left: 2px; }

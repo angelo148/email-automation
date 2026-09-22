@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.routing import APIRoute
 
 from app.core.config import get_settings
-from app.schemas.mailbox import BulkAction, DraftInput, MessageAction, SubmitPreview
+from app.schemas.mailbox import BulkAction, DraftInput, MessageAction, SubmitPreview, ScheduleEdit
 from app.services import mail_graph, microsoft_auth_service
 from app.services.mail_store import MailConflict, MailStore
 from app.services.send_job_service import calculate_workbook_version, get_preview
@@ -140,8 +140,13 @@ def update_draft(draft_id: UUID, payload: DraftInput, store: Store):
 
 
 @router.get("/jobs/{job_id}")
-def open_job(job_id: UUID, store: Store):
-    return store.job(job_id)
+def open_job(job_id: UUID, store: Store, current: bool = False):
+    return store.job(job_id, current=current)
+
+
+@router.put("/jobs/{job_id}/schedule")
+def edit_schedule(job_id: UUID, payload: ScheduleEdit, store: Store):
+    return store.edit_schedule(job_id, payload.schedule, payload.revision)
 
 
 @router.post("/submit", status_code=202)
@@ -174,16 +179,21 @@ def submit_preview(payload: SubmitPreview, store: Store):
 
 async def apply_action(item: MessageAction, store, token=None):
     if item.kind != "graph":
-        store.local_action(item.kind, item.id, item.action)
-        return
+        return store.local_action(item.kind, item.id, item.action) or item.id
     token = token or await get_token()
     if item.action in {"read", "unread"}:
         await mail_graph.mark_read(token, item.id, item.action == "read")
         return
-    if item.action not in {"trash", "restore"}:
+    if item.action not in {"trash", "restore", "delete"}:
         raise MailConflict("This action is not available for a Microsoft message.")
     message = await mail_graph.get_message(token, item.id)
     deleted = await mail_graph.folder_info(token, "deleteditems")
+    if item.action == "delete":
+        if message["parent_folder_id"] != deleted["id"]:
+            raise MailConflict("Only messages in Trash can be permanently deleted.")
+        await mail_graph.delete_message(token, item.id)
+        store.forget_origin(item.id)
+        return
     if item.action == "trash":
         if message["parent_folder_id"] == deleted["id"]:
             return
@@ -211,8 +221,8 @@ async def perform_actions(payload: BulkAction, store: Store):
         try:
             if item.kind == "graph" and token is None:
                 token = await get_token()
-            await apply_action(item, store, token)
-            results.append({"id": item.id, "ok": True})
+            effective_id = await apply_action(item, store, token) or item.id
+            results.append({"id": item.id, "effective_id": effective_id, "ok": True})
         except (
             MailConflict,
             LookupError,

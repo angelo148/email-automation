@@ -74,6 +74,9 @@ def test_inbox_shell_does_not_require_workbook(client):
     for folder in ("inbox", "outbox", "sent", "drafts", "trash"):
         assert f'data-folder="{folder}"' in response.text
     assert 'id="compose-button"' in response.text
+    assert 'id="delete-confirm-dialog"' in response.text
+    assert 'id="permanently-delete-selected"' in response.text
+    assert "Delete selected" in response.text
 
 
 def test_draft_roundtrip_and_optimistic_edit(client, store):
@@ -92,6 +95,14 @@ def test_draft_roundtrip_and_optimistic_edit(client, store):
     store.local_action("draft", draft["id"], "restore")
     assert store.list_local("drafts")[0]["subject"] == "Revised"
     assert MailStore(store.path).draft(draft["id"])["content"] == ""
+
+
+def test_trashed_draft_can_be_permanently_deleted(store):
+    draft = store.save_draft(DraftInput(subject="Delete me"))
+    store.local_action("draft", draft["id"], "trash")
+    store.local_action("draft", draft["id"], "delete")
+    with pytest.raises(LookupError):
+        store.draft(draft["id"])
 
 
 def test_mailbox_rejects_cross_origin_mutation(client):
@@ -279,8 +290,14 @@ def test_recurring_completion_creates_exactly_one_next_occurrence(
     assert queued[0]["schedule"] == job["schedule"]
     store.finish_job(job["id"])
     assert len(store.list_local("outbox")) == 1
-    with pytest.raises(MailConflict, match="occurrence has finished"):
-        store.local_action("job", job["id"], "trash")
+    active = store.job(job["id"], current=True)
+
+    assert active["folder"] == "outbox"
+
+    store.local_action("job", active["id"], "trash")
+
+    assert store.job(active["id"])["folder"] == "trash"
+    assert store.claim_due(now_utc(), 300) is None
 
 
 def test_pause_during_send_stops_remaining_routes(store, fake_sender, monkeypatch):
@@ -336,6 +353,33 @@ def test_graph_trash_and_restore_keep_original_folder(client, store, monkeypatch
         assert r.json()["results"][0]["ok"]
     assert moves == ["deleteditems", "sent-id"]
     assert store.origin("immutable-id")["folder_name"] == "Sent"
+
+
+def test_graph_message_can_be_permanently_deleted_from_trash(client, store, monkeypatch):
+    deleted = []
+
+    async def token():
+        return "fake"
+
+    async def message(*args):
+        return {"parent_folder_id": "trash-id"}
+
+    async def folder(*args):
+        return {"id": "trash-id", "displayName": "Deleted Items"}
+
+    async def delete(token, message_id):
+        deleted.append(message_id)
+
+    monkeypatch.setattr(routes, "get_token", token)
+    monkeypatch.setattr(mail_graph, "get_message", message)
+    monkeypatch.setattr(mail_graph, "folder_info", folder)
+    monkeypatch.setattr(mail_graph, "delete_message", delete)
+    response = client.post(
+        "/mail/actions",
+        json={"items": [{"kind": "graph", "id": "immutable-id", "action": "delete"}]},
+    )
+    assert response.json()["results"][0]["ok"]
+    assert deleted == ["immutable-id"]
 
 
 def test_cursor_cannot_exfiltrate_token():
