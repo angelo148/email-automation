@@ -198,9 +198,7 @@ async function initializeMicrosoftAuth() {
     }
 
     if (!status.authenticated) {
-        window.location.replace(
-            "/auth/login"
-        );
+        showError("Connect your Microsoft account from the mailbox before sending. Drafts can be saved now.");
     }
 }
 
@@ -716,370 +714,106 @@ function renderRecipients(
     );
 }
 
-function renderResults(data) {
-    resultItems.innerHTML =
-        "";
+let composeIntent = "send", currentSchedule = null, draftId = null, draftRevision = null;
+let composeDirty = false, previewBusy = false, previewCache = null, previewSignature = "";
 
-    resultSummary.innerHTML =
-        "";
-
-    const title =
-        document.createElement(
-            "div"
-        );
-
-    title.className =
-        "result-summary-title";
-
-    if (data.failed === 0) {
-        title.textContent =
-            "All emails completed successfully.";
-    } else if (
-        data.successful === 0
-    ) {
-        title.textContent =
-            "Email sending failed.";
-    } else {
-        title.textContent =
-            "Email sending completed with some failures.";
+async function composeApi(url, method = "GET", body) {
+    const response = await fetch(url, {method, cache:"no-store", headers:{"Content-Type":"application/json", "X-Mail-Client":"1"}, body:body === undefined ? undefined : JSON.stringify(body)});
+    const data = await response.json();
+    if (!response.ok) {
+        const detail = Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(" ") : data.detail;
+        throw new Error(typeof detail === "string" ? detail : "The request could not be completed.");
     }
-
-    const summary =
-        document.createElement(
-            "div"
-        );
-
-    summary.className =
-        "result-summary-text";
-
-    summary.textContent =
-        `Sender: ${data.sender} | Total: ${data.total} | Successful: ${data.successful} | Failed: ${data.failed}`;
-
-    resultSummary.appendChild(title);
-    resultSummary.appendChild(summary);
-
-    data.results.forEach(
-        (result) => {
-            const card =
-                document.createElement(
-                    "div"
-                );
-
-            card.className =
-                result.success
-                    ? "result-card success"
-                    : "result-card failure";
-
-            const status =
-                document.createElement(
-                    "div"
-                );
-
-            status.className =
-                "result-status";
-
-            status.textContent =
-                result.success
-                    ? "SENT"
-                    : "FAILED";
-
-            const name =
-                document.createElement(
-                    "div"
-                );
-
-            name.className =
-                "result-title";
-
-            name.textContent =
-                result.name;
-
-            const detail =
-                document.createElement(
-                    "div"
-                );
-
-            detail.className =
-                "result-detail";
-
-            detail.textContent =
-                result.detail;
-
-            card.appendChild(status);
-            card.appendChild(name);
-            card.appendChild(detail);
-            resultItems.appendChild(card);
-        }
-    );
+    return data;
 }
-
+function restoreScheduleTime(start) {
+    const hour24 = Number(start.slice(11, 13));
+    document.getElementById("schedule-start").value = start.slice(0, 10);
+    document.getElementById("schedule-hour").value = String(hour24 % 12 || 12);
+    document.getElementById("schedule-minute").value = start.slice(14, 16);
+    document.getElementById("schedule-period").value = hour24 >= 12 ? "PM" : "AM";
+}
+function readSchedule() {
+    const date = document.getElementById("schedule-start").value;
+    if (!date) throw new Error("Choose a send date.");
+    const hour = Number(document.getElementById("schedule-hour").value);
+    const minute = document.getElementById("schedule-minute").value;
+    const period = document.getElementById("schedule-period").value;
+    if (!Number.isInteger(hour) || hour < 1 || hour > 12 || !/^[0-5][0-9]$/.test(minute) || !["AM", "PM"].includes(period)) {
+        throw new Error("Choose a valid time, including AM or PM.");
+    }
+    const hour24 = (hour % 12) + (period === "PM" ? 12 : 0);
+    const start = `${date}T${String(hour24).padStart(2, "0")}:${minute}`;
+    return {start, timezone:document.getElementById("schedule-timezone").value.trim(),
+        frequency:document.getElementById("schedule-frequency").value,
+        interval:document.getElementById("schedule-frequency").value === "once" ? 1 : Number(document.getElementById("schedule-interval").value),
+        end_date:document.getElementById("schedule-frequency").value === "once" ? null : (document.getElementById("schedule-end").value || null)};
+}
+function draftPreview(payload) {
+    return {sender:fixedSenderEmail, subject:payload.subject || "(No subject)", content:payload.content || "(No content yet)",
+        recipient_count:payload.selected_company_rows.length,
+        recipients:getSelectedOptions().map(o => ({source_row:Number(o.dataset.sourceRow), name:o.dataset.companyName,
+            module:o.dataset.moduleName, third_party_group:o.dataset.groupName,
+            to:JSON.parse(o.dataset.to || "[]"), cc:JSON.parse(o.dataset.cc || "[]")}))};
+}
 async function requestPreview() {
-    currentPayload =
-        buildPayload();
-
-    continueButton.disabled =
-        true;
-
-    continueButton.textContent =
-        "Preparing Preview...";
-
-    clearError();
-
+    if (isSending || previewBusy) return;
+    previewBusy = true; continueButton.disabled = true; clearError();
     try {
-        const response =
-            await fetch(
-                "/email/preview",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify(
-                        currentPayload
-                    ),
-                }
-            );
-
-        const data =
-            await response.json();
-
-        if (!response.ok) {
-            throw new Error(
-                typeof data.detail === "string"
-                    ? data.detail
-                    : "Could not create email preview."
-            );
-        }
-        currentPreviewId =
-        data.preview_id;
-
-        previewSender.textContent =
-            fixedSenderEmail
-            || data.sender
-            || "Fixed Outlook sender";
-
-        previewCount.textContent =
-            `${data.recipient_count} route${data.recipient_count === 1 ? "" : "s"}`;
-
-        senderWarning.textContent =
-            "";
-
-        sendButton.disabled =
-            false;
-
-        previewSubject.textContent =
-            data.subject;
-
-        previewContent.textContent =
-            data.content;
-
-        renderRecipients(
-            data.recipients
-        );
-
-        closeRecipientPicker();
-
-        openModal(
-            previewModal
-        );
-
-    } catch (error) {
-        console.error(
-            "Email preview failed.",
-            error
-        );
-
-        showError(
-            error.message
-            || "Could not create email preview."
-        );
-
-    } finally {
-        continueButton.disabled =
-            false;
-
-        continueButton.innerHTML =
-            'Preview Email <span>→</span>';
-    }
-}
-
-function convertJobToUiResult(job) {
-    return {
-        sender:
-            job.sender
-            || fixedSenderEmail,
-
-        total:
-            job.total,
-
-        successful:
-            job.accepted,
-
-        failed:
-            job.total
-            - job.accepted,
-
-        results:
-            job.results.map(
-                (result) => ({
-                    source_row:
-                        result.source_row,
-
-                    name:
-                        result.name,
-
-                    success:
-                        result.status
-                        === "accepted",
-
-                    detail:
-                        result.detail
-                        || (
-                            result.status
-                            === "accepted"
-                                ? "Email accepted by Microsoft Graph."
-                                : result.status
-                                    === "authentication_required"
-                                    ? "Microsoft sign-in is required before this route can continue."
-                                    : result.status
-                                        === "unknown"
-                                        ? "Email outcome is unknown and requires review."
-                                        : result.status
-                                            === "pending"
-                                            ? "Email is pending."
-                                            : "Email was not accepted."
-                        ),
-                })
-            ),
-    };
-}
-
-async function sendEmails() {
-    if (
-        !currentPreviewId
-        || isSending
-    ) {
-        return;
-    }
-
-    isSending = true;
-
-    sessionStorage.setItem(
-        "pending_send_preview_id",
-        currentPreviewId
-    );
-
-    sendButton.disabled =
-        true;
-
-    previewBack.disabled =
-        true;
-
-    previewClose.disabled =
-        true;
-
-    sendButton.textContent =
-        "Sending...";
-
-    senderWarning.textContent =
-        "";
-
-    try {
-        const response =
-            await fetch(
-                "/email/send-persistent",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        preview_id:
-                            currentPreviewId,
-                    }),
-                }
-            );
-
-        if (
-            response.status === 401
-        ) {
-            window.location.replace(
-                "/auth/login"
-            );
-
-            return;
-        }
-
-        const data =
-            await response.json();
-
-        if (!response.ok) {
-            if (
-                response.status === 404
-                || response.status === 409
-                || response.status === 422
-            ) {
-                sessionStorage.removeItem(
-                    "pending_send_preview_id"
-                );
+        currentPayload = buildPayload();
+        currentSchedule = composeIntent === "schedule" ? readSchedule() : null;
+        let data;
+        if (composeIntent === "draft") {
+            data = draftPreview(currentPayload);
+        } else {
+            const signature = JSON.stringify(currentPayload);
+            if (previewCache && previewSignature === signature) data = previewCache;
+            else {
+                data = await composeApi("/email/preview", "POST", currentPayload);
+                previewCache = data; previewSignature = signature;
             }
-
-            throw new Error(
-                typeof data.detail === "string"
-                    ? data.detail
-                    : "Email sending failed."
-            );
+            currentPreviewId = data.preview_id;
         }
-
-        sessionStorage.removeItem(
-            "pending_send_preview_id"
-        );
-
-        const uiResult =
-            convertJobToUiResult(
-                data
-            );
-
-        renderResults(
-            uiResult
-        );
-
-        closeModal(
-            previewModal
-        );
-
-        openModal(
-            resultsModal
-        );
-
-    } catch (error) {
-        console.error(
-            "Email sending failed.",
-            error
-        );
-
-        senderWarning.textContent =
-            error.message
-            || "Email sending failed.";
-
-    } finally {
-        isSending = false;
-
-        previewBack.disabled =
-            false;
-
-        previewClose.disabled =
-            false;
-
-        sendButton.textContent =
-            "Send Emails";
-
-        sendButton.disabled =
-            false;
-    }
+        previewSender.textContent = data.sender || fixedSenderEmail;
+        previewCount.textContent = `${data.recipient_count} route${data.recipient_count === 1 ? "" : "s"}`;
+        previewSubject.textContent = data.subject; previewContent.textContent = data.content;
+        senderWarning.textContent = ""; sendButton.disabled = false;
+        sendButton.textContent = {send:"Send now",schedule:"Confirm schedule",draft:"Save draft"}[composeIntent];
+        document.getElementById("preview-schedule").textContent = currentSchedule
+            ? `${currentSchedule.frequency === "once" ? "One time" : `Repeat ${currentSchedule.frequency}, every ${currentSchedule.interval}`} · Starts ${currentSchedule.start.replace("T"," ")} · ${currentSchedule.timezone}${currentSchedule.end_date ? ` · Ends ${currentSchedule.end_date}` : ""}. These exact recipient addresses will be used for every occurrence.`
+            : composeIntent === "draft" ? "Save this message for later. Saving a draft does not send it." : "Send these exact recipients and content now.";
+        renderRecipients(data.recipients); closeRecipientPicker(); openModal(previewModal); sendButton.focus();
+    } catch(error) {showError(error.message);}
+    finally {previewBusy=false; continueButton.disabled=false;}
 }
+async function sendEmails() {
+    if (isSending || !currentPayload) return;
+    isSending = true; sendButton.disabled=true; previewBack.disabled=true; previewClose.disabled=true;
+    senderWarning.textContent="";
+    try {
+        if (composeIntent === "draft") {
+            const payload = {...currentPayload, revision:draftRevision};
+            if (!document.getElementById("schedule-panel").hidden && document.getElementById("schedule-start").value) payload.schedule = readSchedule();
+            const saved = await composeApi(draftId ? `/mail/drafts/${draftId}` : "/mail/drafts", draftId ? "PUT" : "POST", payload);
+            draftId=saved.id; draftRevision=saved.revision;
+        } else {
+            if (!currentPreviewId) throw new Error("Create a preview first.");
+            await composeApi("/mail/submit", "POST", {preview_id:currentPreviewId, schedule:currentSchedule, draft_id:draftId, draft_revision:draftRevision});
+        }
+        composeDirty=false;
+        closeModal(previewModal);
+        const destination = composeIntent === "draft" ? "drafts" : "outbox";
+        if (window.parent !== window) window.parent.postMessage({type:"mail-saved",folder:destination},location.origin);
+        else location.assign("/");
+    } catch(error) {senderWarning.textContent=error.message;}
+    finally {isSending=false; sendButton.disabled=false; previewBack.disabled=false; previewClose.disabled=false;}
+}
+window.mailComposeCanClose = () => {
+    if (isSending || previewBusy) return false;
+    if (composeDirty && !confirm("Close this unsaved message? Choose Cancel to return and save it as a draft.")) return false;
+    composeDirty = false;
+    return true;
+};
 
 function filterRecipientOptions() {
     const query =
@@ -1401,6 +1135,7 @@ emailForm.addEventListener(
             return;
         }
 
+        composeIntent = "send";
         await requestPreview();
     }
 );
@@ -1485,3 +1220,51 @@ initializeMicrosoftAuth()
             "Microsoft authentication could not be initialized."
         );
     });
+emailForm.addEventListener("input", () => {composeDirty=true;});
+recipientPicker.addEventListener("click", () => {composeDirty=true;});
+window.addEventListener("beforeunload", event => {if (composeDirty) {event.preventDefault(); event.returnValue="";}});
+document.getElementById("draft-action").addEventListener("click", () => {composeIntent="draft"; requestPreview();});
+document.getElementById("schedule-action").addEventListener("click", () => {
+    const panel=document.getElementById("schedule-panel");
+    if(panel.hidden) {panel.hidden=false; panel.scrollIntoView({block:"center"}); document.getElementById("schedule-start").focus({preventScroll:true}); return;}
+    if(!emailForm.reportValidity()) return;
+    composeIntent="schedule"; requestPreview();
+});
+function updateScheduleFields() {
+    const frequency = document.getElementById("schedule-frequency").value;
+    const recurring = frequency !== "once";
+    const interval = document.getElementById("schedule-interval");
+    document.getElementById("schedule-interval-field").hidden = !recurring;
+    document.getElementById("schedule-end-field").hidden = !recurring;
+    interval.disabled = !recurring;
+    document.getElementById("schedule-end").disabled = !recurring;
+    const unit = {daily: "day", weekly: "week", monthly: "month"}[frequency] || "day";
+    document.getElementById("schedule-unit").textContent = unit + (Number(interval.value) === 1 ? "" : "s");
+}
+document.getElementById("schedule-frequency").addEventListener("change", updateScheduleFields);
+document.getElementById("schedule-interval").addEventListener("input", updateScheduleFields);
+updateScheduleFields();
+document.getElementById("schedule-timezone").value=Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Beirut";
+(async () => {
+    const id=new URLSearchParams(location.search).get("draft");
+    if(!id) return;
+    try {
+        const d=await composeApi(`/mail/drafts/${encodeURIComponent(id)}`);
+        if(d.folder !== "drafts") throw new Error("Restore this draft from Trash before editing.");
+        draftId=d.id; draftRevision=d.revision; subjectInput.value=d.subject; contentInput.value=d.content;
+        selectableOptions.forEach(o => setSelected(o,d.selected_company_rows.includes(Number(o.dataset.sourceRow))));
+        defaultAllSelectionActive=false; updateSelectionUI();
+        const missing=d.selected_company_rows.filter(row => !selectableOptions.some(o => Number(o.dataset.sourceRow)===row));
+        if(missing.length) showError("Some saved recipient rows are no longer available. Review recipients before sending.");
+        if(d.schedule) {
+            document.getElementById("schedule-panel").hidden=false;
+            restoreScheduleTime(d.schedule.start);
+            document.getElementById("schedule-timezone").value=d.schedule.timezone;
+            document.getElementById("schedule-frequency").value=d.schedule.frequency;
+            document.getElementById("schedule-interval").value=d.schedule.interval;
+            document.getElementById("schedule-end").value=d.schedule.end_date || "";
+            updateScheduleFields();
+        }
+        composeDirty=false;
+    } catch(error) {showError(error.message);}
+})();

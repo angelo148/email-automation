@@ -112,6 +112,8 @@ class EmailRouteStatus(StrEnum):
     """Persistent state of one recipient route."""
 
     PENDING = "pending"
+    SENDING = "sending"
+    RETRY = "retry"
     ACCEPTED = "accepted"
     FAILED = "failed"
     UNKNOWN = "unknown"
@@ -121,6 +123,10 @@ class EmailRouteStatus(StrEnum):
 class EmailJobStatus(StrEnum):
     """Overall state of one email send operation."""
 
+    QUEUED = "queued"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+    RETRY = "retry"
     SENDING = "sending"
     COMPLETED = "completed"
     PARTIAL = "partial"

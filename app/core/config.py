@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
     app_name: str = "AI Email Automation"
-    app_version: str = "0.1.0"
+    app_version: str = "0.2.0"
 
     environment: Literal[
         "development",
@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     companies_file: Path = Path("data/3rd Party- Ticket Support.xlsx")
 
     send_job_db_file: Path = Path("app_data/send_jobs.sqlite3")
+
+    scheduler_enabled: bool = True
+    scheduler_poll_seconds: int = Field(default=10, ge=1, le=300)
+    schedule_late_grace_seconds: int = Field(default=300, ge=0, le=86400)
 
     microsoft_client_id: str | None = None
     microsoft_client_secret: str | None = None

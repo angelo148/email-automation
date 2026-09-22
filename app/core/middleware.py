@@ -11,7 +11,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         incoming = request.headers.get("X-Request-ID", "").strip()
-        request_id = incoming or str(uuid.uuid7())
+        request_id = incoming or str(uuid.uuid4())
 
         request.state.request_id = request_id
         token = request_id_var.set(request_id)

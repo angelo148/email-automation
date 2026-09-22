@@ -47,7 +47,7 @@ def _group_companies_by_third_party(
 
 
 @router.get(
-    "/",
+    "/compose",
     response_class=HTMLResponse,
     status_code=status.HTTP_200_OK,
 )
@@ -77,9 +77,15 @@ async def home(
 
     return templates.TemplateResponse(
         request=request,
-        name="index.html",
+        name="compose.html",
         context={
             "grouped_companies": grouped_companies,
             "sendable_count": sendable_count,
         },
     )
+
+
+@router.get("/", response_class=HTMLResponse)
+async def mailbox_home(request: Request) -> HTMLResponse:
+    """Open Inbox even when the recipient workbook is temporarily unavailable."""
+    return templates.TemplateResponse(request=request, name="index.html", context={})
