@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -10,7 +12,9 @@ from app.routes.auth import router as auth_router
 from app.routes.companies import router as companies_router
 from app.routes.email import router as email_router
 from app.routes.health import router as health_router
+from app.routes.mailbox import router as mailbox_router
 from app.routes.web import router as web_router
+from app.services.mail_scheduler import start_scheduler, stop_scheduler
 
 
 def create_app() -> FastAPI:
@@ -31,7 +35,16 @@ def create_app() -> FastAPI:
 
     docs_enabled = settings.environment != "production"
 
+    @asynccontextmanager
+    async def lifespan(application):
+        await start_scheduler(application, settings)
+        try:
+            yield
+        finally:
+            await stop_scheduler(application)
+
     application = FastAPI(
+        lifespan=lifespan,
         title=settings.app_name,
         version=settings.app_version,
         debug=settings.debug,
@@ -60,6 +73,7 @@ def create_app() -> FastAPI:
     application.include_router(email_router)
     application.include_router(web_router)
     application.include_router(auth_router)
+    application.include_router(mailbox_router)
 
     logger.debug("Application initialized successfully.")
 

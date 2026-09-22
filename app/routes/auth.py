@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import asyncio
 from threading import Lock
 from typing import Any
 from urllib.parse import quote
@@ -61,7 +60,7 @@ async def get_auth_status() -> dict[
     settings = get_settings()
 
     try:
-        authenticated = is_authenticated()
+        authenticated = await asyncio.to_thread(is_authenticated)
     except MicrosoftAuthConfigurationError:
         authenticated = False
 
@@ -75,7 +74,7 @@ async def get_auth_status() -> dict[
 async def login() -> RedirectResponse:
     """Start the one-time Microsoft sign-in."""
 
-    flow = begin_authentication()
+    flow = await asyncio.to_thread(begin_authentication)
 
     state = str(flow.get("state", ""))
 

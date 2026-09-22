@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>AI Email Automation</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', path='css/app.css') }}?v=0.2.2"
+    >
+</head>
+
+<body class="compose-page">
+    <div class="app-shell">
+        <header class="topbar">
+            <div class="brand-section">
+                <div class="brand-icon">AI</div>
+
+                <div>
+                    <h1 class="brand-title">
+                        AI Email Automation
+                    </h1>
+
+                    <div class="brand-subtitle">
+                        Compose · review every recipient before sending
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <form id="email-form" autocomplete="off">
+                <div
+                    class="form-error"
+                    id="form-error"
+                ></div>
+
+                <div class="form-group">
+                    <div class="form-label-row">
+                        <div class="form-label">
+                            Sender
+                        </div>
+                    </div>
+
+                    <div class="sender-display">
+                        <span class="sender-icon" aria-hidden="true">
+                            ✉
+                        </span>
+
+                        <span id="sender-email-display">
+                            Loading sender...
+                        </span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="form-label-row">
+                        <label
+                            class="form-label"
+                            for="company-search"
+                        >
+                            Recipients
+                        </label>
+                    </div>
+
+                    <div
+                        class="recipient-picker"
+                        id="recipient-picker"
+                    >
+                        <div class="lookup-shell">
+                            <span
+                                class="search-icon"
+                                aria-hidden="true"
+                            >
+                                ⌕
+                            </span>
+
+                            <input
+                                type="text"
+                                id="company-search"
+                                class="lookup-input"
+                                placeholder="Search and select recipients..."
+                                aria-label="Search by third party, group, or module"
+                                aria-controls="recipient-dropdown"
+                                aria-expanded="false"
+                                autocomplete="off"
+                            >
+
+                            <span
+                                class="lookup-toggle"
+                                id="lookup-toggle"
+                                aria-hidden="true"
+                            >
+                                <span class="lookup-chevron">
+                                    ⌄
+                                </span>
+                            </span>
+                        </div>
+
+                        <div
+                            class="recipient-dropdown"
+                            id="recipient-dropdown"
+                        >
+                            {% for group_name, companies in grouped_companies.items() %}
+                                <div
+                                    class="recipient-group"
+                                    data-third-party-group
+                                    data-group-name="{{ group_name }}"
+                                >
+                                    <div class="group-title">
+                                        <span class="group-title-name">
+                                            {{ group_name }}
+                                        </span>
+
+                                        <button
+                                            type="button"
+                                            class="group-badge"
+                                            data-group-toggle
+                                            aria-label="Toggle all sendable routes in {{ group_name }}"
+                                            title="Select or unselect this group"
+                                        >
+                                            <span data-group-count>
+                                                {{ companies | length }}
+                                            </span>
+                                        </button>
+                                    </div>
+
+                                    {% for company in companies %}
+                                        <button
+                                            type="button"
+                                            class="recipient-option{% if company.can_email %} selected{% endif %}"
+                                            data-company-option
+                                            data-source-row="{{ company.source_row }}"
+                                            data-company-name="{{ company.name }}"
+                                            data-group-name="{{ company.third_party_group }}"
+                                            data-module-name="{{ company.module }}"
+                                            data-to="{{ company.to | tojson | forceescape }}"
+                                            data-cc="{{ company.cc | tojson | forceescape }}"
+                                            data-can-email="{{ 'true' if company.can_email else 'false' }}"
+                                            data-selected="{{ 'true' if company.can_email else 'false' }}"
+                                            {% if not company.can_email %}
+                                                disabled
+                                            {% endif %}
+                                        >
+                                            <span class="selection-box">
+                                                {% if company.can_email %}
+                                                    ✓
+                                                {% else %}
+                                                    —
+                                                {% endif %}
+                                            </span>
+
+                                            <span class="recipient-identity">
+                                                <span class="recipient-name">
+                                                    {{ company.name }}
+                                                </span>
+
+                                                <span class="recipient-meta">
+                                                    {{ company.third_party_group }} · {{ company.module }}
+                                                </span>
+                                            </span>
+
+                                            {% if company.can_email %}
+                                                <span class="recipient-addresses">
+                                                    <span class="recipient-address-line">
+                                                        <span class="recipient-address-label">To</span>
+                                                        <span class="recipient-address-value">
+                                                            {{ company.to | join(", ") }}
+                                                        </span>
+                                                    </span>
+
+                                                    <span class="recipient-address-line">
+                                                        <span class="recipient-address-label">CC</span>
+                                                        <span class="recipient-address-value">
+                                                            {% if company.cc %}
+                                                                {{ company.cc | join(", ") }}
+                                                            {% else %}
+                                                                None
+                                                            {% endif %}
+                                                        </span>
+                                                    </span>
+                                                </span>
+                                            {% else %}
+                                                <span class="unavailable-message">
+                                                    {{ company.unavailable_reason }}
+                                                </span>
+                                            {% endif %}
+                                        </button>
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+
+                            <div
+                                class="no-results"
+                                id="no-results"
+                            >
+                                No matching third-party routes found.
+                            </div>
+                        </div>
+
+                        <div
+                            class="selected-chips"
+                            id="selected-chips"
+                        ></div>
+
+                        <div class="selection-toolbar">
+                            <div class="toolbar-buttons">
+                                <button
+                                    type="button"
+                                    class="small-button"
+                                    id="select-all"
+                                >
+                                    Select All
+                                </button>
+
+                                <button
+                                    type="button"
+                                    class="small-button"
+                                    id="unselect-all"
+                                >
+                                    Unselect All
+                                </button>
+                            </div>
+
+                            <div
+                                class="selection-counter"
+                                id="selected-count"
+                            ></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="form-label-row">
+                        <label
+                            class="form-label"
+                            for="subject"
+                        >
+                            Subject
+                        </label>
+
+                        <span class="form-hint">
+                            Maximum 200 characters
+                        </span>
+                    </div>
+
+                    <input
+                        type="text"
+                        id="subject"
+                        class="form-input"
+                        maxlength="200"
+                        placeholder="Enter email subject..."
+                        autocomplete="off"
+                        autocorrect="off"
+                        spellcheck="false"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <div class="form-label-row">
+                        <label
+                            class="form-label"
+                            for="content"
+                        >
+                            Email Content
+                        </label>
+                    </div>
+
+                    <textarea
+                        id="content"
+                        class="form-textarea"
+                        placeholder="Write your email message..."
+                        autocomplete="off"
+                        spellcheck="true"
+                        required
+                    ></textarea>
+                </div>
+
+                <section id="schedule-panel" class="schedule-panel" hidden>
+                    <h3>Schedule this email</h3>
+                    <div class="schedule-fields">
+                        <label>Send at <input type="date" id="schedule-start"></label>
+                        <div class="schedule-time-field" role="group" aria-labelledby="schedule-time-label">
+                            <span id="schedule-time-label">Time</span>
+                            <div class="schedule-time-controls">
+                                <select id="schedule-hour" aria-label="Hour">{% for hour in range(1, 13) %}<option value="{{ hour }}"{% if hour == 9 %} selected{% endif %}>{{ '%02d'|format(hour) }}</option>{% endfor %}</select>
+                                <span aria-hidden="true">:</span>
+                                <select id="schedule-minute" aria-label="Minute">{% for minute in range(60) %}<option value="{{ '%02d'|format(minute) }}">{{ '%02d'|format(minute) }}</option>{% endfor %}</select>
+                                <select id="schedule-period" aria-label="AM or PM"><option value="AM">AM</option><option value="PM">PM</option></select>
+                            </div>
+                        </div>
+                        <label>Timezone <input id="schedule-timezone" list="timezone-options" value="Asia/Beirut"><datalist id="timezone-options"><option value="Asia/Beirut"><option value="Asia/Dubai"><option value="Europe/Paris"><option value="Europe/London"><option value="America/New_York"><option value="UTC"></datalist></label>
+                        <label>Repeat <select id="schedule-frequency"><option value="once">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
+                        <label id="schedule-interval-field" hidden>Every <span class="schedule-interval-box"><input id="schedule-interval" aria-label="Repeat interval" type="number" value="1" min="1" max="365"><span id="schedule-unit">day</span></span></label>
+                        <label id="schedule-end-field" hidden>Ends on (optional) <input type="date" id="schedule-end"></label>
+                    </div>
+                </section>
+                <div class="form-actions">
+                    <button type="button" class="small-button" id="draft-action">Save as draft</button>
+                    <button type="button" class="small-button" id="schedule-action">Schedule</button>
+                    <button
+                        type="submit"
+                        class="primary-button"
+                        id="continue-button"
+                    >
+                        Send now
+                        <span>→</span>
+                    </button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <!-- EMAIL PREVIEW -->
+    <div
+        class="modal-backdrop"
+        id="preview-modal"
+        aria-hidden="true"
+    >
+        <div
+            class="modal"
+            role="dialog"
+            aria-modal="true"
+        >
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">
+                        Email Preview
+                    </h2>
+
+                    <div class="modal-subtitle">
+                        Review content and recipients before sending.
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    class="modal-close"
+                    id="preview-close"
+                    aria-label="Close preview"
+                >
+                    ×
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="preview-grid">
+                    <div class="preview-block">
+                        <div class="preview-label">
+                            From
+                        </div>
+
+                        <div
+                            class="preview-value"
+                            id="preview-sender"
+                        ></div>
+
+                        <div
+                            class="sender-warning"
+                            id="sender-warning"
+                        ></div>
+                    </div>
+
+                    <div class="preview-block">
+                        <div class="preview-label">
+                            Selected Routes
+                        </div>
+
+                        <div
+                            class="preview-value"
+                            id="preview-count"
+                        ></div>
+                    </div>
+
+                    <div class="preview-block full">
+                        <div class="preview-label">
+                            Subject
+                        </div>
+
+                        <div
+                            class="preview-value"
+                            id="preview-subject"
+                        ></div>
+                    </div>
+
+                    <div class="preview-block full">
+                        <div class="preview-label">
+                            Email Content
+                        </div>
+
+                        <div
+                            class="preview-content-box preview-value"
+                            id="preview-content"
+                        ></div>
+                    </div>
+
+                    <div class="preview-block full"><div class="preview-label">Action</div><div id="preview-schedule" class="preview-value"></div></div>
+                    <div class="preview-block full">
+                        <div class="preview-label">
+                            Recipients
+                        </div>
+
+                        <div
+                            class="preview-recipient-list"
+                            id="preview-recipients"
+                        ></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button
+                    type="button"
+                    class="modal-button secondary"
+                    id="preview-back"
+                >
+                    Back
+                </button>
+
+                <button
+                    type="button"
+                    class="modal-button primary"
+                    id="send-button"
+                >
+                    Send Emails
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div
+        class="modal-backdrop"
+        id="results-modal"
+        aria-hidden="true"
+    >
+        <div
+            class="modal"
+            role="dialog"
+            aria-modal="true"
+        >
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">
+                        Email Results
+                    </h2>
+
+                    <div class="modal-subtitle">
+                        Submission result for each selected route.
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    class="modal-close"
+                    id="results-close"
+                    aria-label="Close results"
+                >
+                    ×
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div
+                    class="result-summary"
+                    id="result-summary"
+                ></div>
+
+                <div id="result-items"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button
+                    type="button"
+                    class="modal-button primary"
+                    id="results-done"
+                >
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', path='js/app.js') }}?v=0.2.2"></script>
+</body>
+</html>

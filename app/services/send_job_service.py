@@ -1,6 +1,7 @@
 import hashlib
 import json
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,9 +41,10 @@ def _serialize_datetime(value: datetime) -> str:
     return value.isoformat()
 
 
+@contextmanager
 def _connect(
     database_path: Path,
-) -> sqlite3.Connection:
+):
     database_path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -57,7 +59,11 @@ def _connect(
 
     connection.execute("PRAGMA foreign_keys = ON")
 
-    return connection
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def initialize_send_job_store(
@@ -258,7 +264,9 @@ def claim_send_job(
 
     initialize_send_job_store(database_path)
 
-    connection = _connect(database_path)
+    connection = sqlite3.connect(database_path, timeout=10.0)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
 
     try:
         connection.execute("BEGIN IMMEDIATE")
@@ -292,6 +300,20 @@ def claim_send_job(
 
         if existing_job is not None:
             job_id = UUID(existing_job["job_id"])
+
+            # Mailbox jobs are exclusively owned by the persistent scheduler.
+            # The compatibility endpoint must never bypass a future due time.
+            has_queue = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mail_queue'"
+            ).fetchone()
+            if (
+                has_queue
+                and connection.execute(
+                    "SELECT 1 FROM mail_queue WHERE job_id=?", (str(job_id),)
+                ).fetchone()
+            ):
+                connection.commit()
+                return SendJobClaim(job_id=job_id, claimed=False)
 
             if existing_job["status"] == EmailJobStatus.AUTHENTICATION_REQUIRED.value:
                 now = _utc_now()

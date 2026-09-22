@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ MICROSOFT_AUTHORITY = "https://login.microsoftonline.com/consumers"
 MICROSOFT_SCOPES = [
     "User.Read",
     "Mail.Send",
+    "Mail.ReadWrite",
 ]
 
 GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me"
@@ -234,7 +236,8 @@ async def complete_authentication(
     app = get_microsoft_app()
 
     try:
-        result = app.acquire_token_by_auth_code_flow(
+        result = await asyncio.to_thread(
+            app.acquire_token_by_auth_code_flow,
             auth_code_flow=flow,
             auth_response=auth_response,
         )

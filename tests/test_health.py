@@ -14,4 +14,4 @@ def test_health_endpoint_returns_ok() -> None:
 
     assert body["status"] == "ok"
     assert body["service"] == "AI Email Automation"
-    assert body["version"] == "0.1.0"
+    assert body["version"] == "0.2.0"

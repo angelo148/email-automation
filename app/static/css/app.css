@@ -1205,3 +1205,34 @@
                 gap: 2px;
             }
         }
+
+/* Mailbox compose view. Existing recipient-picker styles remain in place. */
+[hidden] { display: none !important; }
+.compose-page { background: #fff; }
+.compose-page .app-shell { box-shadow: none; max-width: 1100px; margin: 0 auto; border: none; }
+.compose-page .topbar { display: none; }
+.compose-page .main-content { padding: 25px 32px 0; }
+.compose-page .form-actions { display: flex; justify-content: flex-end; gap: 12px; position: sticky; bottom: 0; background: #fff; padding: 18px 0; border-top: 1px solid #e5ebf4; z-index: 15; margin-top: 20px; }
+.compose-page .form-actions button { min-height: 43px; border-radius: 10px; }
+.compose-page .form-textarea { min-height: 230px; }
+.schedule-panel { margin: 22px 0; padding: 20px; background: #f3f7fe; border: 1px solid #dfe9f7; border-radius: 13px; }
+.schedule-panel h3 { margin: 0 0 18px; font-size: 15px; color: #34547f; }
+.schedule-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.schedule-fields label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #48617e; }
+.schedule-fields input,.schedule-fields select { min-width: 0; width: 100%; padding: 10px 8px; font: inherit; background: white; border: 1px solid #d1ddec; border-radius: 7px; color: #2f486a; }
+.schedule-panel p { font-size: 11px; line-height: 1.7; color: #8292a8; margin: 18px 0 0; }
+#preview-schedule { font-size: 12px; line-height: 1.8; color: #3f6d9f; }
+@media(max-width:700px) { .schedule-fields { grid-template-columns: 1fr 1fr; } .compose-page .main-content { padding: 18px 16px 0; } .compose-page .form-actions { gap: 7px; } .compose-page .form-actions button { padding: 10px 12px; font-size: 12px; } }
+
+.schedule-fields label { min-width: 0; }
+.schedule-fields input, .schedule-fields select { min-height: 44px; font-size: 14px; }
+.schedule-interval-box { display: flex; align-items: center; background: #fff; border: 1px solid #d1ddec; border-radius: 7px; padding-right: 12px; gap: 8px; }
+.schedule-fields .schedule-interval-box input { border: 0; width: 72px; background: transparent; }
+.schedule-interval-box span { font-size: 14px; color: #2f486a; }
+.schedule-fields input:focus-visible, .schedule-fields select:focus-visible { outline: 2px solid #4385eb; outline-offset: 2px; }
+@media(max-width:480px) { .schedule-fields { grid-template-columns: minmax(0, 1fr); } }
+
+.schedule-time-field { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #48617e; min-width: 0; }
+.schedule-time-controls { display: flex; align-items: center; gap: 6px; }
+.schedule-time-controls select { flex: 1; min-width: 0; padding-left: 6px; padding-right: 4px; }
+@media(min-width:1000px) { .schedule-fields { grid-template-columns: 1.15fr 1.3fr 1.15fr 1fr; } }

@@ -106,7 +106,7 @@ def web_excel_file(
 def test_home_page_loads_multiselect(
     web_excel_file: Path,
 ) -> None:
-    response = client.get("/")
+    response = client.get("/compose")
 
     assert response.status_code == 200
 
@@ -122,7 +122,7 @@ def test_home_page_loads_multiselect(
 def test_companies_are_rendered(
     web_excel_file: Path,
 ) -> None:
-    response = client.get("/")
+    response = client.get("/compose")
 
     assert response.status_code == 200
 
@@ -138,7 +138,7 @@ def test_companies_are_rendered(
 def test_third_party_groups_are_rendered(
     web_excel_file: Path,
 ) -> None:
-    response = client.get("/")
+    response = client.get("/compose")
 
     assert response.status_code == 200
 
@@ -152,7 +152,7 @@ def test_third_party_groups_are_rendered(
 def test_sendable_companies_start_selected(
     web_excel_file: Path,
 ) -> None:
-    response = client.get("/")
+    response = client.get("/compose")
 
     assert response.status_code == 200
 
@@ -173,7 +173,7 @@ def test_sendable_companies_start_selected(
 def test_unavailable_companies_are_disabled(
     web_excel_file: Path,
 ) -> None:
-    response = client.get("/")
+    response = client.get("/compose")
 
     assert response.status_code == 200
 
