@@ -12,6 +12,24 @@ MailFlow uses FastAPI, Microsoft Graph, SQLite, and an Excel-based recipient pic
 - Microsoft Inbox and Sent, message reading, read/unread controls, folder search, 50-message remote pages, bulk delete, and restoration to the recorded original folder.
 - Local Outbox/draft deletion and restoration. Restored Outbox jobs stay paused until explicitly resumed.
 
+## Set up a new Windows checkout
+
+1. Install Python 3.11 or newer, clone the repository, and open a PowerShell terminal in its folder. Create a virtual environment and install the dependencies:
+
+   ```powershell
+   py -m venv .venv
+   .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+   Copy-Item .env.example .env
+   ```
+
+2. Supply your own recipient workbook. By default the app reads `data/3rd Party- Ticket Support.xlsx`; the `data/` folder and workbook are not in Git. Create the folder and put your workbook there, or change `COMPANIES_FILE` in `.env` to its location. The active worksheet must have these headers within its first 50 rows: `Module`, `Third Party`, `Third Party Group`, `Email To`, and `Email CC`. Use one company per row. `Email To` and `Email CC` can contain addresses separated by commas, semicolons, or newlines.
+
+3. Use an existing Microsoft Entra app registration if its owner gives you the client ID and client secret privately, or [register your own application](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app). This version signs in personal Microsoft accounts (such as Outlook.com) through the `consumers` authority. The registration must support personal Microsoft accounts and have a **Web** redirect URI of `http://localhost:8000/auth/callback`. For a new registration, choose **Personal Microsoft accounts only**, create a client secret under **Certificates & secrets**, and copy its **Value** when shown. Under **API permissions**, add Microsoft Graph **Delegated** permissions `User.Read`, `Mail.Send`, and `Mail.ReadWrite`. Grant consent when prompted during sign-in.
+
+4. Edit the local `.env`: set `MICROSOFT_CLIENT_ID` to the application (client) ID, `MICROSOFT_CLIENT_SECRET` to the secret **Value**, and `MICROSOFT_FIXED_SENDER_EMAIL` to the Outlook mailbox that will sign in and send mail. Someone using their own mailbox sets their own address here, even if they share the Entra registration. Using the owner's mailbox also requires signing in as that mailbox; the client ID and secret alone do not grant mailbox access. You do not need to edit `app/core/config.py`; it reads these values from `.env`. Keep `MICROSOFT_CALLBACK_URI=http://localhost:8000/auth/callback` unless you also change the Web redirect URI in Entra. `MICROSOFT_TENANT_ID` and `MICROSOFT_REDIRECT_URI` are retained for older integrations; this sign-in flow uses the `consumers` authority and `MICROSOFT_CALLBACK_URI`. Keep `.env` private.
+
+5. Start the app with `.\.venv\Scripts\python.exe start_app.py`, then open `http://localhost:8000/auth/login` to sign in as the configured sender. The app creates `app_data/` and its SQLite database at startup. It creates `auth_data/` for the encrypted Microsoft token cache when sign-in starts. Both folders are ignored by Git and remain local to that installation. The token cache is protected for the Windows user who signed in; a different user or computer must sign in again.
+
 ## Upgrade your existing Windows project
 
 1. Stop the app with **Ctrl+C**. Back up your current project, including `app_data/`, before applying the update.

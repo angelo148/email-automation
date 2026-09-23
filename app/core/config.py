@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # Server-side authorization-code callback used by the persistent login.
     microsoft_callback_uri: str = "http://localhost:8000/auth/callback"
 
-    microsoft_fixed_sender_email: str = "angelofarah1@outlook.com"
+    microsoft_fixed_sender_email: str = ""
 
     # Encrypted with Windows DPAPI by msal-extensions.
     microsoft_token_cache_file: Path = Path("auth_data/microsoft_token_cache.bin")
