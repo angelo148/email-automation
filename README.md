@@ -1,11 +1,11 @@
-# MailFlow — smart email automation
+# MailFlow — email automation
 
-Built on the supplied `New WinRAR ZIP archive(3).zip` project. Python/FastAPI, Microsoft Graph, SQLite, and the existing Excel recipient picker.
+MailFlow uses FastAPI, Microsoft Graph, SQLite, and an Excel-based recipient picker.
 
 ## What is included
 
 - Gmail-style mailbox, opening to Inbox, with Inbox / Outbox / Sent / Drafts / Trash.
-- Compose at the bottom right. The existing grouped recipient picker, select/unselect controls, disabled unavailable routes, To/CC separation, fixed sender, content validation, and preview are retained.
+- Compose includes a grouped recipient picker, selection controls, disabled unavailable routes, To/CC routing, a fixed sender, content validation, and a preview. Each selected company receives a separate email.
 - Send now, Schedule, and Save as draft at the bottom right of Compose. Every action has a confirmation preview; incomplete drafts can be saved.
 - One-time, daily, weekly, and monthly schedules; adjustable interval, IANA timezone, and optional end date.
 - Persistent drafts with edit conflict detection; persistent queue with per-route progress and a single scheduler owner.
@@ -34,7 +34,7 @@ Built on the supplied `New WinRAR ZIP archive(3).zip` project. Python/FastAPI, M
 
 The update creates additional tables in the existing database on startup. Existing saved previews and send-job records are retained. The new mailbox queue owns its jobs; the old send endpoint cannot start a scheduled job early.
 
-The package is an update for your existing installation. Supply your existing Excel workbook and configuration when running it in a separate folder.
+When running the app in a separate folder, provide your Excel workbook and configuration.
 
 ## Sending and drafts
 
@@ -82,11 +82,11 @@ For messages deleted outside this app, the original folder may be unknown. The r
 
 ## Checks and boundaries
 
-The automated suite includes the uploaded project's existing tests and new checks for queue concurrency, recurrence/DST, authentication interruption, uncertain outcomes, throttling, cancellation, stale previews, draft conflicts, and Microsoft folder restoration. Live HTTP calls are blocked in pytest; email operations use mocks.
+Automated tests cover queue concurrency, recurrence and daylight saving changes, authentication interruption, uncertain outcomes, throttling, cancellation, stale previews, draft conflicts, and Microsoft folder restoration. Email operations are mocked; the tests do not send real email.
 
 The UI checks cover preview/save/reopen draft, scheduling, Outbox delete/restore, message reading, bulk Microsoft delete/restore, permanent Trash deletion, and responsive controls.
 
-Validation was performed on Linux with Python 3.12. Windows DPAPI sign-in, real tenant/account consent, live Microsoft mailbox behavior, and real email delivery require a check in your installation. Existing FastAPI/AnyIO test-client deprecation warnings remain.
+Live Microsoft sign-in, mailbox operations, and email delivery need to be verified with your account and tenant.
 
 ## Microsoft API references
 
