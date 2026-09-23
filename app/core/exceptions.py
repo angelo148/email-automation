@@ -14,7 +14,7 @@ from app.services.email_service import (
 )
 from app.services.excel_service import ExcelValidationError
 
-logger = logging.getLogger("app.exceptions")
+logger = logging.getLogger(__name__)
 
 
 def _request_id_from(request: Request) -> str:
