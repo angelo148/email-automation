@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import (
@@ -143,6 +144,7 @@ class SavedEmailPreview(BaseModel):
 
     subject: str
     content: str
+    delivery_mode: Literal["separate", "together"] = "separate"
 
     workbook_version: str
 

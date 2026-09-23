@@ -255,6 +255,9 @@ async function act(items, action, destination) {
     if (!optimistic || failures.length) await loadFolder();
 }
 function scheduleText(item) {
+    if (item.kind === "job" && item.delivery_mode === "together") {
+        return "Send together is unavailable in this version. Open the feature version to send this job.";
+    }
     if (!item.schedule) return item.kind === "job" ? `Send now · Next attempt: ${new Date(item.date).toLocaleString()}` : "";
     const r = item.schedule;
     const unit = {daily:"day",weekly:"week",monthly:"month"}[r.frequency];

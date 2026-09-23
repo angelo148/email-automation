@@ -78,6 +78,7 @@ def initialize_send_job_store(
                 sender TEXT,
                 subject TEXT NOT NULL,
                 content TEXT NOT NULL,
+                delivery_mode TEXT NOT NULL DEFAULT 'separate',
                 workbook_version TEXT NOT NULL,
                 recipients_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
@@ -122,6 +123,14 @@ def initialize_send_job_store(
                 idx_send_job_routes_job_id
             ON send_job_routes(job_id);
             """)
+
+        preview_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(email_previews)")
+        }
+        if "delivery_mode" not in preview_columns:
+            connection.execute(
+                "ALTER TABLE email_previews ADD COLUMN delivery_mode TEXT NOT NULL DEFAULT 'separate'"
+            )
 
 
 def calculate_workbook_version(
@@ -218,6 +227,7 @@ def get_preview(
                 sender,
                 subject,
                 content,
+                delivery_mode,
                 workbook_version,
                 recipients_json,
                 created_at
@@ -239,6 +249,7 @@ def get_preview(
         sender=row["sender"],
         subject=row["subject"],
         content=row["content"],
+        delivery_mode=row["delivery_mode"],
         workbook_version=row["workbook_version"],
         recipient_count=len(recipients),
         recipients=recipients,
