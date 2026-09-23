@@ -6,7 +6,6 @@ from openpyxl import Workbook
 
 from app.main import app
 from app.routes import email as email_routes
-from app.services import email_service
 
 client = TestClient(app)
 
@@ -210,9 +209,7 @@ def test_preview_removes_duplicate_rows(
     assert [recipient["source_row"] for recipient in body["recipients"]] == [2, 3]
 
 
-def test_send_requires_bearer_token(
-    email_excel_file: Path,
-) -> None:
+def test_legacy_direct_send_is_retired() -> None:
     response = client.post(
         "/email/send",
         json={
@@ -222,178 +219,6 @@ def test_send_requires_bearer_token(
         },
     )
 
-    assert response.status_code == 401
-    assert response.json()["detail"] == ("Microsoft sign-in is required.")
-
-
-def test_send_succeeds_for_all_recipients(
-    email_excel_file: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sent_routes: list[tuple[list[str], list[str]]] = []
-
-    async def fake_sender(
-        access_token: str,
-        expected_sender_email: str,
-    ) -> str:
-        assert access_token == "fake-token"
-        assert expected_sender_email == FIXED_SENDER
-
-        return FIXED_SENDER
-
-    async def fake_send(
-        *,
-        access_token: str,
-        subject: str,
-        content: str,
-        to_addresses: list[str],
-        cc_addresses: list[str],
-    ) -> None:
-        assert access_token == "fake-token"
-        assert subject == "Ticket Support"
-        assert content == "Please investigate this issue."
-
-        sent_routes.append(
-            (
-                to_addresses,
-                cc_addresses,
-            )
-        )
-
-    monkeypatch.setattr(
-        email_service,
-        "_get_sender_email",
-        fake_sender,
-    )
-
-    monkeypatch.setattr(
-        email_service,
-        "_send_graph_email",
-        fake_send,
-    )
-
-    response = client.post(
-        "/email/send",
-        headers={
-            "Authorization": "Bearer fake-token",
-        },
-        json={
-            "selected_company_rows": [
-                2,
-                3,
-            ],
-            "subject": "Ticket Support",
-            "content": "Please investigate this issue.",
-        },
-    )
-
-    assert response.status_code == 200
-
-    body = response.json()
-
-    assert body["sender"] == FIXED_SENDER
-    assert body["total"] == 2
-    assert body["successful"] == 2
-    assert body["failed"] == 0
-
-    assert sent_routes == [
-        (
-            ["omt@example.com"],
-            ["manager@omt.com"],
-        ),
-        (
-            ["mto@example.com"],
-            ["operations@omt.com"],
-        ),
-    ]
-
-
-def test_send_records_per_recipient_failure(
-    email_excel_file: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def fake_sender(
-        access_token: str,
-        expected_sender_email: str,
-    ) -> str:
-        assert access_token == "fake-token"
-        assert expected_sender_email == FIXED_SENDER
-
-        return FIXED_SENDER
-
-    async def fake_send(
-        **kwargs,
-    ) -> None:
-        raise email_service.EmailSendError("Simulated Graph send failure.")
-
-    monkeypatch.setattr(
-        email_service,
-        "_get_sender_email",
-        fake_sender,
-    )
-
-    monkeypatch.setattr(
-        email_service,
-        "_send_graph_email",
-        fake_send,
-    )
-
-    response = client.post(
-        "/email/send",
-        headers={
-            "Authorization": "Bearer fake-token",
-        },
-        json={
-            "selected_company_rows": [2],
-            "subject": "Test",
-            "content": "Test email.",
-        },
-    )
-
-    assert response.status_code == 200
-
-    body = response.json()
-
-    assert body["sender"] == FIXED_SENDER
-    assert body["total"] == 1
-    assert body["successful"] == 0
-    assert body["failed"] == 1
-    assert body["results"][0]["success"] is False
-    assert body["results"][0]["detail"] == "Simulated Graph send failure."
-
-
-def test_send_rejects_invalid_microsoft_session(
-    email_excel_file: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def fake_sender(
-        access_token: str,
-        expected_sender_email: str,
-    ) -> str:
-        assert access_token == "expired-token"
-        assert expected_sender_email == FIXED_SENDER
-
-        raise email_service.EmailAuthenticationError(
-            "Microsoft sign-in is no longer valid."
-        )
-
-    monkeypatch.setattr(
-        email_service,
-        "_get_sender_email",
-        fake_sender,
-    )
-
-    response = client.post(
-        "/email/send",
-        headers={
-            "Authorization": "Bearer expired-token",
-        },
-        json={
-            "selected_company_rows": [2],
-            "subject": "Test",
-            "content": "Test email.",
-        },
-    )
-
-    assert response.status_code == 401
-    assert response.json()["detail"] == ("Microsoft sign-in is no longer valid.")
+    assert response.status_code == 410
+    assert "POST /email/preview" in response.json()["detail"]
+    assert "POST /mail/submit" in response.json()["detail"]

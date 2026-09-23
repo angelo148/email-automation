@@ -1,6 +1,5 @@
 from fastapi import (
     APIRouter,
-    Header,
     HTTPException,
     status,
 )
@@ -11,17 +10,12 @@ from app.schemas.email import (
     EmailJobStatus,
     EmailPreviewRequest,
     EmailSendByPreviewRequest,
-    EmailSendRequest,
-    EmailSendResponse,
     SavedEmailPreview,
 )
 from app.services.email_service import (
-    EmailAuthenticationError,
     EmailPreviewError,
-    EmailSendError,
     build_email_preview,
     send_saved_preview_job,
-    send_selected_emails,
 )
 from app.services.excel_service import (
     ExcelValidationError,
@@ -50,80 +44,6 @@ router = APIRouter(
 # Keep this module-level variable because the current tests monkeypatch it.
 COMPANIES_FILE = get_settings().companies_file
 SEND_JOB_DB_FILE = get_settings().send_job_db_file
-
-
-def _extract_bearer_token(
-    authorization: str | None,
-) -> str:
-    """Extract the existing frontend bearer token safely."""
-
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Microsoft sign-in is required.",
-        )
-
-    scheme, _, token = authorization.partition(" ")
-
-    if scheme.casefold() != "bearer" or not token.strip():
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Microsoft authorization header.",
-        )
-
-    return token.strip()
-
-
-def _load_companies():
-    try:
-        return load_companies_from_excel(COMPANIES_FILE)
-
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Third-party Excel file was not found.",
-        ) from exc
-
-    except ExcelValidationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
-
-
-async def _send_with_token(
-    *,
-    request: EmailSendRequest,
-    access_token: str,
-) -> EmailSendResponse:
-    settings = get_settings()
-    companies = _load_companies()
-
-    try:
-        return await send_selected_emails(
-            request=request,
-            companies=companies,
-            access_token=access_token,
-            fixed_sender_email=(settings.microsoft_fixed_sender_email),
-        )
-
-    except EmailPreviewError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
-    except EmailAuthenticationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
-        ) from exc
-
-    except EmailSendError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
 
 
 @router.post(
@@ -190,22 +110,18 @@ async def preview_email(
 
 @router.post(
     "/send",
-    response_model=EmailSendResponse,
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_410_GONE,
 )
-async def send_email(
-    request: EmailSendRequest,
-    authorization: str | None = Header(default=None),
-) -> EmailSendResponse:
+async def send_email_legacy() -> dict[str, str]:
     """
-    Existing bearer-token endpoint retained for backward compatibility/tests.
+    Retired direct-send endpoint. Use the preview and persistent queue flow.
     """
-
-    access_token = _extract_bearer_token(authorization)
-
-    return await _send_with_token(
-        request=request,
-        access_token=access_token,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail=(
+            "Direct sending has been retired. Create a preview with "
+            "POST /email/preview, then queue it with POST /mail/submit."
+        ),
     )
 
 
