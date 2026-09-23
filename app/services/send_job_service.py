@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID, uuid7
 
 from app.schemas.email import (
     EmailJobResponse,
@@ -156,7 +156,7 @@ def save_preview(
 
     initialize_send_job_store(database_path)
 
-    preview_id = uuid4()
+    preview_id = uuid7()
     created_at = _utc_now()
 
     recipients_json = json.dumps(
@@ -351,7 +351,7 @@ def claim_send_job(
                 claimed=False,
             )
 
-        job_id = uuid4()
+        job_id = uuid7()
         now = _utc_now()
 
         connection.execute(

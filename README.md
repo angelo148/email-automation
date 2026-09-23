@@ -14,7 +14,7 @@ MailFlow uses FastAPI, Microsoft Graph, SQLite, and an Excel-based recipient pic
 
 ## Set up a new Windows checkout
 
-1. Install Python 3.11 or newer, clone the repository, and open a PowerShell terminal in its folder. Create a virtual environment and install the dependencies:
+1. Install Python 3.14 or newer, clone the repository, and open a PowerShell terminal in its folder. The app uses Python's built-in UUIDv7 generator. Create a virtual environment and install the dependencies:
 
    ```powershell
    py -m venv .venv

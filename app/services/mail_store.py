@@ -5,7 +5,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import uuid7
 
 from app.schemas.mailbox import DraftInput, ScheduleRule
 from app.services.recurrence import next_occurrence, occurrence
@@ -71,7 +71,7 @@ class MailStore:
 
     def save_draft(self, payload: DraftInput, draft_id=None):
         data = payload.model_dump(mode="json", exclude={"revision"})
-        draft_id = str(draft_id or uuid4())
+        draft_id = str(draft_id or uuid7())
         with self.connect(True) as db:
             old = db.execute(
                 "SELECT * FROM mail_drafts WHERE id=?", (draft_id,)
@@ -122,7 +122,7 @@ class MailStore:
         ).fetchone()
         if preview is None:
             raise LookupError("Preview not found. Create a new preview.")
-        job_id = str(uuid4())
+        job_id = str(uuid7())
         db.execute(
             "INSERT INTO send_jobs(job_id,preview_id,status,created_at) VALUES(?,?,'queued',?)",
             (job_id, preview_id, stamp()),
@@ -192,7 +192,7 @@ class MailStore:
                         raise MailConflict(
                             "The draft changed. Reopen and preview it again."
                         )
-                series_id = str(uuid4()) if rule and rule.frequency != "once" else None
+                series_id = str(uuid7()) if rule and rule.frequency != "once" else None
                 job_id = self._insert_job(db, preview_id, due, rule_json, series_id)
                 if draft_id:
                     db.execute("DELETE FROM mail_drafts WHERE id=?", (str(draft_id),))
@@ -254,7 +254,7 @@ class MailStore:
                 raise MailConflict("Choose a send time in the future.")
             # Editing creates a fresh series. This preserves sent history and
             # makes the edited occurrence the new recurrence anchor.
-            series_id = str(uuid4()) if rule.frequency != "once" else None
+            series_id = str(uuid7()) if rule.frequency != "once" else None
             remains_paused = row["status"] in {"paused", "authentication_required"}
             db.execute(
                 """UPDATE mail_queue SET rule_json=?,run_at=?,series_id=?,occurrence_index=0,
@@ -589,7 +589,7 @@ class MailStore:
                 "SELECT p.* FROM email_previews p JOIN send_jobs j ON j.preview_id=p.preview_id WHERE j.job_id=?",
                 (job_id,),
             ).fetchone()
-            preview_id = str(uuid4())
+            preview_id = str(uuid7())
             db.execute(
                 "INSERT INTO email_previews VALUES(?,?,?,?,?,?,?)",
                 (
