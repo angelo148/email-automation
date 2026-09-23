@@ -155,12 +155,6 @@ async def send_email_with_persistent_session(
             ),
         ) from exc
 
-    if preview.delivery_mode != "separate":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This preview uses Send together. Open feature/send-together to send it.",
-        )
-
     existing_job = get_send_job_for_preview(
         database_path=SEND_JOB_DB_FILE,
         preview_id=request.preview_id,

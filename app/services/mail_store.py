@@ -283,8 +283,7 @@ class MailStore:
         with self.connect() as db:
             job_id = self._queue_row(db, job_id, current)["job_id"]
             row = db.execute(
-                """SELECT q.*,j.status,j.preview_id,j.created_at,p.sender,p.subject,p.content,
-                p.delivery_mode,p.recipients_json
+                """SELECT q.*,j.status,j.preview_id,j.created_at,p.sender,p.subject,p.content,p.recipients_json
                 FROM mail_queue q JOIN send_jobs j ON j.job_id=q.job_id
                 JOIN email_previews p ON p.preview_id=j.preview_id WHERE q.job_id=?""",
                 (str(job_id),),
@@ -466,9 +465,7 @@ class MailStore:
         with self.connect(True) as db:
             row = db.execute(
                 """SELECT j.job_id,j.status,q.run_at FROM send_jobs j JOIN mail_queue q ON q.job_id=j.job_id
-                JOIN email_previews p ON p.preview_id=j.preview_id
-                WHERE q.folder='outbox' AND q.cancelled=0 AND j.status IN ('queued','retry')
-                AND p.delivery_mode='separate' AND q.run_at<=?
+                WHERE q.folder='outbox' AND q.cancelled=0 AND j.status IN ('queued','retry') AND q.run_at<=?
                 ORDER BY q.run_at LIMIT 1""",
                 (stamp(now),),
             ).fetchone()
@@ -594,10 +591,7 @@ class MailStore:
             ).fetchone()
             preview_id = str(uuid4())
             db.execute(
-                """INSERT INTO email_previews(
-                    preview_id,sender,subject,content,workbook_version,
-                    recipients_json,created_at
-                ) VALUES(?,?,?,?,?,?,?)""",
+                "INSERT INTO email_previews VALUES(?,?,?,?,?,?,?)",
                 (
                     preview_id,
                     old["sender"],

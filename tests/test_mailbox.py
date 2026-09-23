@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.main import create_app
-from app.routes import email as email_routes
 from app.routes import mailbox as routes
 from app.schemas.email import EmailPreviewRecipient
 from app.schemas.mailbox import DraftInput, ScheduleRule
@@ -151,27 +150,6 @@ def test_late_job_does_not_send_after_unattended_restart(store):
     job = store.enqueue(preview(store).preview_id)
     assert store.claim_due(now_utc() + timedelta(hours=1), 300) is None
     assert store.job(job["id"])["status"] == "paused"
-
-
-def test_production_skips_together_jobs_in_shared_database(client, store, monkeypatch):
-    shared_preview = preview(store)
-    with store.connect(True) as db:
-        db.execute(
-            "UPDATE email_previews SET delivery_mode='together' WHERE preview_id=?",
-            (str(shared_preview.preview_id),),
-        )
-    together_job = store.enqueue(shared_preview.preview_id)
-    assert store.claim_due(now_utc(), 300) is None
-    assert store.job(together_job["id"])["status"] == "queued"
-
-    monkeypatch.setattr(email_routes, "SEND_JOB_DB_FILE", store.path)
-    response = client.post(
-        "/email/send-persistent", json={"preview_id": str(shared_preview.preview_id)}
-    )
-    assert response.status_code == 409
-
-    separate_job = store.enqueue(preview(store).preview_id)
-    assert store.claim_due(now_utc(), 300)["id"] == separate_job["id"]
 
 
 def test_calendar_month_end_uses_original_anchor():
